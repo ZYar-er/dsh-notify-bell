@@ -1,0 +1,46 @@
+# Deploy the dsh-notify-bell sound showcase to GitHub Pages.
+#
+# The whole repository root is uploaded so the site keeps the
+# /sound-showcase/ sub-path (README links rely on it):
+#   https://zyar-er.github.io/dsh-notify-bell/sound-showcase/
+#
+# Manual setup (one time, on GitHub):
+#   Settings → Pages → Build and deployment → Source: "GitHub Actions"
+# (with this workflow in place, any push to `main` redeploys automatically)
+
+name: Deploy static content to Pages
+
+on:
+  push:
+    branches: ["main"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          # Upload the repository root: the site is sound-showcase/ under it,
+          # so the published URL keeps the /sound-showcase/ path.
+          path: "."
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
