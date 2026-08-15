@@ -125,16 +125,22 @@ code {
 	gap: 14px;
 }
 
-.brand-icon {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: 52px;
-	height: 52px;
-	border-radius: 14px;
-	background: var(--accent-soft);
-	color: var(--accent);
+.brand-logo {
+	width: 72px;
+	height: 72px;
 	flex: none;
+	filter: none; /* light theme: black bell as-is */
+}
+
+/* Dark theme: invert black -> white. PNG keeps its transparent background. */
+html[data-theme="dark"] .brand-logo {
+	filter: invert(1);
+}
+
+@media (prefers-color-scheme: dark) {
+	:root:not([data-theme="light"]) .brand-logo {
+		filter: invert(1);
+	}
 }
 
 .brand h1 {
@@ -469,6 +475,11 @@ main {
 
 .site-footer p {
 	margin: 0;
+}
+
+.site-footer .footer-credits {
+	margin-top: 4px;
+	font-size: 11.5px;
 }
 
 /* ---------- Responsive ---------- */
