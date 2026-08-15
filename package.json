@@ -1,0 +1,33 @@
+{
+  "name": "dsh-notify-bell",
+  "version": "0.9.0",
+  "private": true,
+  "description": "DSH notification plugin with semantic sounds (done/block/permission/question/error): goal complete/block, approval/asked, ask_user_question, and agent/error notify via BEL or WAV. Web bell toggle in the session header controls enabled state at runtime. Configurable via ~/.config/dsh/notify-bell.json (legacy bellCount still accepted).",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": {
+    ".": "./src/index.js",
+    "./config.js": "./src/config.js",
+    "./events.js": "./src/events.js",
+    "./bell.js": "./src/bell.js",
+    "./wav.js": "./src/wav.js",
+    "./audio.js": "./src/audio.js",
+    "./log.js": "./src/log.js",
+    "./client": "./src/client.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "sound-showcase",
+    "README.md",
+    "README.zh.md"
+  ],
+  "dsh": {
+    "client": {
+      "platform": "web",
+      "inject": [
+        "@deepseek-ai/dsh-client-ui-slots"
+      ]
+    }
+  }
+}
