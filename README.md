@@ -8,7 +8,7 @@ A **community plugin** for DeepSeek Harness (DSH) — semantic notification soun
 
 Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
-> **Developer Preview · v0.10.0**
+> **Developer Preview · v0.11.0**
 
 🎧 **[Listen to the notification sounds →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 

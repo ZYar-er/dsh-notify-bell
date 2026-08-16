@@ -8,7 +8,7 @@
 
 为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
 
-> **Developer Preview · v0.10.0**
+> **Developer Preview · v0.11.0**
 
 🎧 **[试听通知声音 →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
