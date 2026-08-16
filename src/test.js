@@ -69,7 +69,7 @@ import { createBellBackend } from './bell.js';
 import { createWavBackend, detectPlatform, detectWindowsPlayer, detectLinuxPlayer, detectPlayerFor } from './wav.js';
 import { writeEnabled } from './config.js';
 import { classifyGoalChange, classifyApproval, classifyQuestion, classifyAgentError } from './events.js';
-import { apply } from './index.js';
+import { apply, PLUGIN_VERSION } from './index.js';
 import { createTurnTracker } from './turns.js';
 
 const report = (line) => process.stdout.write(line + '\n');
@@ -1237,8 +1237,9 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const s = setupWithWeb({ enabled: true, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	const r = await s.call('getEnabled', undefined, 'GET');
 	check(r.ok === true && r.value.enabled === true, 'Y4 getEnabled', r);
+	check(typeof r.version === 'string' && r.version === PLUGIN_VERSION && PLUGIN_VERSION.length > 0, 'Y4 version present', r.version);
 	rmSync(s.dir, { recursive: true, force: true });
-	report('Y4: HTTP getEnabled ✓');
+	report('Y4: HTTP getEnabled + version ✓');
 }
 
 // Y5: setEnabled(false) → 持久化 + 同一实例立即生效（integration）
@@ -1246,6 +1247,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const s = setupWithWeb({ enabled: true, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	const r = await s.call('setEnabled', { enabled: false });
 	check(r.ok === true && r.value.enabled === false, 'Y5 setEnabled ok', r);
+	check(r.version === PLUGIN_VERSION, 'Y5 version present', r.version);
 	const cfg = JSON.parse(readFileSync(s.file, 'utf8'));
 	check(cfg.enabled === false && cfg.bell.gapMs === GAP, 'Y5 persisted (other fields kept)', cfg);
 	// 同一实例：后续 complete 不通知（无需重启）

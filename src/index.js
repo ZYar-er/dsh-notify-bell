@@ -57,10 +57,14 @@ import { createWavBackend } from './wav.js';
 import { createLogBackend } from './log.js';
 import { createTurnTracker } from './turns.js';
 import { classifyGoalChange, classifyApproval, classifyQuestion, classifyAgentError } from './events.js';
+import pkg from '../package.json' with { type: 'json' };
 
 export { Config } from './config.js';
 
 export const name = 'notify-bell';
+
+/** 插件版本（来自 package.json），随 /notify-bell API 返回，便于前端/调试确认运行中的版本。 */
+export const PLUGIN_VERSION = pkg.version;
 
 /** 本插件只消费事件，不依赖任何服务。 */
 export const inject = [];
@@ -151,10 +155,11 @@ export function apply(ctx, config = {}, options = {}) {
 	};
 
 	// Web → backend 开关 HTTP API（由 dsh-notify-bell 自己暴露，不修改 DSH 核心）。
-	// GET  /notify-bell                 → { ok, value: { enabled } }
+	// GET  /notify-bell                 → { ok, value: { enabled }, version }
 	// POST /notify-bell/setEnabled      → body { enabled } → 持久化 + 运行时生效
 	// POST /notify-bell/toggle          → 翻转 enabled
 	// 任何失败（含配置写失败）返回 { ok: false, error }，客户端据此回滚。
+	// 所有成功响应均带 version（PLUGIN_VERSION），标识运行中的插件版本。
 	ctx.inject(['webServer'], (webCtx) => {
 		const readBody = async (req) => {
 			const chunks = [];
@@ -174,7 +179,7 @@ export function apply(ctx, config = {}, options = {}) {
 				const endpoint = url.pathname.replace(/^\/notify-bell\/?/, '') || 'getEnabled';
 				try {
 					if (endpoint === 'getEnabled') {
-						return json(res, 200, { ok: true, value: { enabled } });
+						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
 					}
 					if (req.method !== 'POST') {
 						return json(res, 405, { ok: false, error: { code: 'method-not-allowed', message: 'use POST' } });
@@ -188,11 +193,11 @@ export function apply(ctx, config = {}, options = {}) {
 					if (endpoint === 'setEnabled') {
 						if (typeof args.enabled !== 'boolean') return json(res, 400, { ok: false, error: { code: 'bad-request', message: 'enabled must be a boolean' } });
 						setEnabled(args.enabled);
-						return json(res, 200, { ok: true, value: { enabled } });
+						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
 					}
 					if (endpoint === 'toggle') {
 						setEnabled(!enabled);
-						return json(res, 200, { ok: true, value: { enabled } });
+						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
 					}
 					return json(res, 404, { ok: false, error: { code: 'not-found', message: `unknown endpoint ${endpoint}` } });
 				} catch (error) {

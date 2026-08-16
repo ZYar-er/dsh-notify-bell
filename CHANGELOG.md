@@ -6,6 +6,10 @@ dsh-notify-bell 版本级、面向用户的变化记录。历史条目与对应�
 
 当前 main 分支（源码版本 0.11.1，尚未发布）。
 
+### Added
+
+- `/notify-bell` HTTP API 的成功响应新增 `version` 字段（来自 package.json，`PLUGIN_VERSION`），可在运行时确认安装的插件版本。
+
 ### Fixed
 
 - Complete 通知改为严格“最终回答”判定：最后一个 `assistant/message` 必须包含非空 `text` block，且其后不得再出现 `tool/call`。tool-call-only、concludes-turn 与空 no-op 回合保持完全静默。
