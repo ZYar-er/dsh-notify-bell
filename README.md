@@ -4,6 +4,8 @@
 
 ![npm](https://img.shields.io/npm/v/dsh-notify-bell)
 
+A **community plugin** for DeepSeek Harness (DSH) — semantic notification sounds.
+
 Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
 > **Developer Preview · v0.10.0**

@@ -4,6 +4,8 @@
 
 ![npm](https://img.shields.io/npm/v/dsh-notify-bell)
 
+**DeepSeek Harness (DSH) 社区插件** — 语义化提示音通知。
+
 为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
 
 > **Developer Preview · v0.10.0**
