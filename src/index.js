@@ -37,9 +37,10 @@
  *
  * 行为：
  *   - enabled=false 时全部通知关闭（不影响 DSH 自身）。
- *   - 防重复：同一 (session, turn)、同一 error（agent id@turn@step）、
- *     同一 approval（session id@approval id）、同一 question
- *     （session id@callId）只通知一次。
+ *   - 防重复：同一 (session, turn)（任何 reason 的 turn/end 都消费一次）、
+ *     同一 error（agent id@turn@step）、同一 approval（session id@approval id）、
+ *     同一 question（session id@callId）只通知一次；去重容器有界且随
+ *     session/disposed 回收。
  *   - user message / 错误消息按 objective.maxLength（默认 120）截断。
  *   - BEL 只在 process.stdout.isTTY 时写入；日志行始终输出。
  *   - soundPack 目前支持 "default"（BEL）与 "wav"（本地音频）。
@@ -47,7 +48,8 @@
  * @param ctx - Cordis 上下文。
  * @param config - Cordis 配置（schema 校验 + 默认填充）。
  * @param options - 可选注入（测试用）：configPath（配置文件路径）、
- *   warn（warning 输出）、write（stdout 写入）、isTTY（TTY 判断）。
+ *   warn（warning 输出）、write（stdout 写入）、isTTY（TTY 判断）、
+ *   maxDedupeKeys（每个去重容器的上限，默认 1000）。
  */
 import { loadConfig, writeEnabled, mergeConfig } from './config.js';
 import { createBellBackend } from './bell.js';
@@ -80,6 +82,7 @@ export function apply(ctx, config = {}, options = {}) {
 		isTTY: options.isTTY
 	};
 	// soundPack 选择 backend：'default' → BEL；'wav' → 本地音频（失败回退 BEL）。
+	// backend 纳入插件生命周期：卸载/HMR 时取消未决铃声与播放进程。
 	const backend = config.soundPack === 'wav'
 		? createWavBackend({
 			...backendOptions,
@@ -91,19 +94,36 @@ export function apply(ctx, config = {}, options = {}) {
 			player: options.player
 		})
 		: createBellBackend(backendOptions);
+	if (typeof ctx.effect === 'function') ctx.effect(() => () => backend.dispose(), 'notify-bell audio backend');
 	const log = createLogBackend({
 		maxLength: config.objective.maxLength,
 		write: options.write
 	});
 	/**
 	 * 去重状态：
-	 * - complete：Map<sessionId, lastNotifiedTurn> —— turn 号单调递增，
-	 *   每 session 至多一条，有界（长跑不增长）。
-	 * - approval/question/error：notified Set（id 全局唯一，仅防重放，
-	 *   频率低，占用可忽略）。
+	 * - complete：由 turns tracker 的 endedTurns 按 (session, turn)
+	 *   单调去重（任何 reason 的 turn/end 都消费一次），不在这里重复存储。
+	 * - approval/question/error：Map<sessionId, Set<dedupeKey>>，随
+	 *   session/disposed 回收；每 session 最多 maxDedupeKeys 条。
+	 * - goal/changed block 等无 sessionId 的键：全局有界 Set，同样最多
+	 *   maxDedupeKeys 条（FIFO 淘汰；超限后去重退化为 best-effort）。
 	 */
-	const notifiedComplete = new Map();
-	const notified = new Set();
+	const maxDedupeKeys = Number.isSafeInteger(options.maxDedupeKeys) && options.maxDedupeKeys > 0
+		? options.maxDedupeKeys
+		: 1000;
+	const notified = new Map();
+	const sessionlessNotified = new Set();
+
+	/** 有界去重：已存在返回 false；否则写入并在超限时淘汰最旧一条。 */
+	const remember = (store, key) => {
+		if (store.has(key)) return false;
+		if (store.size >= maxDedupeKeys) {
+			const oldest = store.values().next().value;
+			if (oldest !== undefined) store.delete(oldest);
+		}
+		store.add(key);
+		return true;
+	};
 
 	/** 运行时开关：先持久化（失败抛错、状态不变），成功后才更新运行时状态。 */
 	const setEnabled = (next) => {
@@ -116,15 +136,18 @@ export function apply(ctx, config = {}, options = {}) {
 		if (!enabled) return false;
 		const evt = config.events[classified.kind];
 		if (!evt?.enabled) return false;
-		if (classified.kind === 'complete') {
-			const last = notifiedComplete.get(classified.sessionId);
-			if (typeof last === 'number' && classified.turn <= last) return false;
-			notifiedComplete.set(classified.sessionId, classified.turn);
-			return true;
+		if (classified.kind === 'complete') return true;
+		const key = classified.dedupeKey;
+		const sessionId = classified.sessionId;
+		if (typeof sessionId === 'string' && sessionId.length > 0 && sessionId !== 'unknown') {
+			let keys = notified.get(sessionId);
+			if (!keys) {
+				keys = new Set();
+				notified.set(sessionId, keys);
+			}
+			return remember(keys, key);
 		}
-		if (notified.has(classified.dedupeKey)) return false;
-		notified.add(classified.dedupeKey);
-		return true;
+		return remember(sessionlessNotified, key);
 	};
 
 	// Web → backend 开关 HTTP API（由 dsh-notify-bell 自己暴露，不修改 DSH 核心）。
@@ -196,6 +219,13 @@ export function apply(ctx, config = {}, options = {}) {
 
 	// turn 跟踪：complete 语义（最终 assistant 回答完成）。
 	const turns = createTurnTracker();
+
+	// session 销毁时回收 turn 跟踪状态与逐 session 通知去重状态。
+	ctx.on('session/disposed', (session) => {
+		const sessionId = session?.id;
+		if (typeof sessionId === 'string' && sessionId.length > 0) notified.delete(sessionId);
+		turns.onSessionDisposed(session);
+	});
 
 	ctx.on('session/event', (session, event) => {
 		// 0) tool/call 必须先进入 turn tracker（即使该 tool 同时是 question），

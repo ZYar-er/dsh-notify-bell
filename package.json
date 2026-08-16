@@ -18,7 +18,15 @@
     "./package.json": "./package.json"
   },
   "files": [
-    "src",
+    "src/index.js",
+    "src/config.js",
+    "src/events.js",
+    "src/turns.js",
+    "src/bell.js",
+    "src/wav.js",
+    "src/audio.js",
+    "src/log.js",
+    "src/client.js",
     "cordis.patch.yml",
     "sound-showcase",
     "README.md",

@@ -39,7 +39,7 @@ Each event uses a distinct semantic sound rather than encoding meaning by counti
 - Configurable event sounds
 - Configurable minimum duration for completion notifications
 - Automatic fallback when audio playback is unavailable
-- Zero third-party runtime dependencies
+- No runtime dependencies beyond the official `@deepseek-ai/schemastery`
 
 ## Platform Support
 

@@ -129,6 +129,9 @@ export function classifyAgentError(payload) {
 	return {
 		kind: 'error',
 		sound: EVENT_SOUNDS.error,
+		// DSH 中 agent id 与 session id 共享同一标识（dsh-agent-loop create(id)）。
+		// 提供给 index.js 按 session 回收错误通知去重键。
+		sessionId: typeof agent?.id === 'string' && agent.id.length > 0 ? agent.id : 'unknown',
 		agentId: agent?.id ?? 'unknown',
 		turn: typeof turn === 'number' ? turn : null,
 		step: typeof step === 'number' ? step : null,

@@ -4,8 +4,8 @@
  * 职责单一：维护主会话每个 turn 的状态 —— turn/start 起始时间、首条
  * 真实用户消息、assistant/message 与 tool/call 的顺序 —— 并在
  * turn/end(reason.completed) 时判断是否存在“最终 assistant 文本回答”，
- * 只有满足严格判定才产出 complete 语义事件。
- * 不负责输出/播放/去重（那是 index.js 的职责）。
+ * 只有满足严格判定才产出 complete 语义事件；这里只保留判定所需的
+ * 最小 turn 结束状态，不负责输出/播放细节。
  *
  * 事件链（已从 DSH 源码确认，dsh-agent-loop/lib/index.js）：
  * turn/start → [step 循环: assistant/chunk → assistant/message →
@@ -24,11 +24,18 @@ export function createTurnTracker(options = {}) {
 	 * delegationDepth 字段（dsh-host-apiproxy 创建主会话的 meta 只有
 	 * {cwd, agentPreset}，dsh-session prepare() 只在 meta 提供时才写入），
 	 * 只有经 JSONL 持久化重启恢复的会话才有 0；子代理的
-	 * delegationDepth >= 1。因此用 `?? 0` 判主会话（与 dsh-subagent
-	 * 的 delegationDepthOf 惯例一致）——undefined 视为主会话，>=1 排除。
+	 * delegationDepth >= 1。因此只有 undefined 或合法非负安全整数 0
+	 * 才视为主会话；null/字符串等异常值保守拒绝（正常 DSH 来源不会出现，
+	 * 但防御性重放/未来扩展中不能把未知深度当主会话）。对于历史/异常
+	 * 子代理记录若同时缺 delegationDepth，仍可用 header.origin === 'subagent'
+	 * 排除。
 	 */
-	const isMainSession = options.isMainSession ??
-		((session) => (session?.header?.delegationDepth ?? 0) === 0);
+	const isMainSession = options.isMainSession ?? ((session) => {
+		const header = session?.header;
+		const depth = header?.delegationDepth;
+		if (depth === undefined) return header?.origin !== 'subagent';
+		return Number.isSafeInteger(depth) && depth === 0 && header?.origin !== 'subagent';
+	});
 
 	/** `${sessionId}:${turn}` → turn 状态。 */
 	const turns = new Map();
@@ -44,6 +51,9 @@ export function createTurnTracker(options = {}) {
 	 * event.data.turn，必须按该字段精确归属，不得复用 currentTurns。
 	 */
 	const currentTurns = new Map();
+
+	/** DSH turn 号为正的安全整数；异常值（0/负数/小数/超大整数）一律拒绝。 */
+	const isValidTurn = (turn) => Number.isSafeInteger(turn) && turn > 0;
 
 	/** 事件顺序戳：优先用 DSH event.seq，回退到观察顺序（重放/测试事件可能没有 seq）。 */
 	let eventOrder = 0;
@@ -70,15 +80,13 @@ export function createTurnTracker(options = {}) {
 		let entry = turns.get(key);
 		if (!entry) {
 			entry = {
+				sessionId,
 				startTime: null,
 				firstUserMessage: null,
 				/** 最后一个 assistant/message（含是否 text / tool-call 的精确载荷判定）。 */
 				lastAssistantMessage: null,
-				lastAssistantMessageTime: null,
 				/** 最后一个 tool/call（用于“最终文本之后不得再有 tool/call”判定）。 */
-				lastToolCall: null,
-				lastToolCallTime: null,
-				notified: false
+				lastToolCall: null
 			};
 			turns.set(key, entry);
 		}
@@ -123,7 +131,7 @@ export function createTurnTracker(options = {}) {
 	const onTurnStart = (session, event) => {
 		if (!isMainSession(session)) return;
 		const turn = event?.data?.turn;
-		if (!Number.isInteger(turn)) return;
+		if (!isValidTurn(turn)) return;
 		const { sessionId, entry } = ensureTurnEntry(session, turn);
 		currentTurns.set(sessionId, turn);
 		entry.startTime = stampEvent(event).time;
@@ -140,7 +148,7 @@ export function createTurnTracker(options = {}) {
 		if (!isMainSession(session)) return;
 		const sessionId = session?.id ?? 'unknown';
 		const turn = currentTurns.get(sessionId);
-		if (!Number.isInteger(turn)) return;
+		if (!isValidTurn(turn)) return;
 		const entry = turns.get(`${sessionId}:${turn}`);
 		if (!entry || entry.firstUserMessage !== null) return;
 		const text = extractUserText(event);
@@ -156,7 +164,7 @@ export function createTurnTracker(options = {}) {
 	const onAssistantMessage = (session, event) => {
 		if (!isMainSession(session)) return;
 		const turn = event?.data?.turn;
-		if (!Number.isInteger(turn)) return;
+		if (!isValidTurn(turn)) return;
 		const { entry } = ensureTurnEntry(session, turn);
 		const { hasText, hasToolCall } = describeAssistantMessage(event);
 		const stamp = stampEvent(event);
@@ -177,7 +185,7 @@ export function createTurnTracker(options = {}) {
 	const onToolCall = (session, event) => {
 		if (!isMainSession(session)) return;
 		const turn = event?.data?.turn;
-		if (!Number.isInteger(turn)) return;
+		if (!isValidTurn(turn)) return;
 		const { entry } = ensureTurnEntry(session, turn);
 		const stamp = stampEvent(event);
 		entry.lastToolCall = {
@@ -204,7 +212,7 @@ export function createTurnTracker(options = {}) {
 		if (!isMainSession(session)) return null;
 		const data = event?.data ?? {};
 		const turn = data.turn;
-		if (!Number.isInteger(turn)) return null;
+		if (!isValidTurn(turn)) return null;
 		const sessionId = session?.id ?? 'unknown';
 		const lastEnded = endedTurns.get(sessionId);
 		const alreadyEnded = typeof lastEnded === 'number' && turn <= lastEnded;
@@ -224,20 +232,28 @@ export function createTurnTracker(options = {}) {
 		const durationMs = entry.startTime !== null && typeof event.time === 'number' && Number.isFinite(event.time)
 			? Math.max(0, event.time - entry.startTime)
 			: null;
-		entry.notified = true;
 		return {
 			kind: 'complete',
-			sound: 'done',
 			sessionId,
 			turn,
 			/** ms；null = 未知（不播放）。 */
 			durationMs,
 			/** 首条真实用户消息摘要；null → 日志 fallback "turn #N"。 */
-			summary: entry.firstUserMessage ?? null,
-			// 防重复：同一 (session, turn) 只通知一次（compaction 不重置 turn 号）。
-			dedupeKey: `complete:${sessionId}:${turn}`
+			summary: entry.firstUserMessage ?? null
 		};
 	};
 
-	return { onTurnStart, onUserMessage, onAssistantMessage, onToolCall, onTurnEnd };
+	/**
+	 * session/disposed：回收该 session 的 currentTurns/endedTurns/未决
+	 * turn entry，避免已销毁会话的状态留在 Map 中。
+	 */
+	const onSessionDisposed = (session) => {
+		const sessionId = session?.id;
+		if (typeof sessionId !== 'string' || sessionId.length === 0) return;
+		currentTurns.delete(sessionId);
+		endedTurns.delete(sessionId);
+		for (const [key, entry] of turns) if (entry.sessionId === sessionId) turns.delete(key);
+	};
+
+	return { onTurnStart, onUserMessage, onAssistantMessage, onToolCall, onTurnEnd, onSessionDisposed };
 }

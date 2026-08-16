@@ -41,6 +41,9 @@
  *   文本后 tool/call / 多 assistant / 重复 end / 非 completed /
  *   子 agent / 长短 duration / 缺 turn/start / 混合 text+tool-call /
  *   非 completed 后完整重放。
+ * v0.11.1 防御/资源修复：
+ *   D1-D7 覆盖异常 delegationDepth/turn 号、session/disposed 回收、
+ *   有界去重、backend dispose、enabled 中途切换、迟到旧 turn/end。
  *
  * v0.10 新增：
  *   S1-S6 官方 Config schema（默认值/校验 fail loudly）+ mergeConfig 优先级
@@ -67,6 +70,7 @@ import { createWavBackend, detectPlatform, detectWindowsPlayer, detectLinuxPlaye
 import { writeEnabled } from './config.js';
 import { classifyGoalChange, classifyApproval, classifyQuestion, classifyAgentError } from './events.js';
 import { apply } from './index.js';
+import { createTurnTracker } from './turns.js';
 
 const report = (line) => process.stdout.write(line + '\n');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -947,6 +951,45 @@ const approvalEvent = (overrides = {}) => ({
 	check('directory' in c === false && 'wav' in c === false, 'W8 classify has no wav fields', c);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('W8: WAV backend 不影响事件层 ✓');
+}
+
+// W9: WAV backend dispose → kill 未决播放进程；dispose 后不再 spawn/fallback
+{
+	const spawned = [];
+	let killed = 0;
+	let exitHandler = null;
+	let errorHandler = null;
+	const fakeSpawn = (cmd, args) => {
+		const child = {
+			on: (event, handler) => {
+				if (event === 'exit') exitHandler = handler;
+				if (event === 'error') errorHandler = handler;
+				return child;
+			},
+			kill: () => { killed++; }
+		};
+		spawned.push({ cmd, args });
+		return child;
+	};
+	const fakeBell = { playCalls: [], play: (sound) => fakeBell.playCalls.push(sound), dispose: () => {} };
+	const wav = createWavBackend({
+		platform: 'windows',
+		directory: '/sounds',
+		player: { cmd: 'powershell.exe' },
+		spawn: fakeSpawn,
+		existsSync: () => true,
+		bell: fakeBell
+	});
+	wav.play('done');
+	check(spawned.length === 1 && killed === 0, 'W9 spawn alive before dispose', { spawned: spawned.length, killed });
+	wav.dispose();
+	check(killed === 1, 'W9 dispose killed in-flight child', killed);
+	exitHandler?.(0);
+	errorHandler?.();
+	check(fakeBell.playCalls.length === 0, 'W9 no fallback after dispose', fakeBell.playCalls);
+	wav.play('block');
+	check(spawned.length === 1, 'W9 play after dispose is no-op', spawned.length);
+	report('W9: WAV dispose 终止播放进程并关闭后端 ✓');
 }
 
 // ---------- X: v7 平台 backend 新增 ----------
@@ -2155,6 +2198,140 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(s.writes.length === 0, 'C1-15 full replay after non-completed silent', s.writes);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('C1-15: 非 completed 后完整重放不通知 ✓');
+}
+
+// ---------- D: v0.11.1 防御/资源修复 ----------
+// D1: delegationDepth 为 null / 非数字字符串 → 保守不通知（不误当主会话）
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	for (const [id, header] of [
+		['session-null-depth', { delegationDepth: null }],
+		['session-string-depth', { delegationDepth: '0' }],
+		['session-legacy-subagent', { origin: 'subagent' }],
+		['session-origin-depth-zero', { delegationDepth: 0, origin: 'subagent' }]
+	]) {
+		const session = { id, header: { id, ...header } };
+		s.emit('session/event', session, turnStart(1, t0));
+		s.emit('session/event', session, turnUserMsg(1, '异常深度会话', t0 + 5));
+		s.emit('session/event', session, assistantText(1, '不应通知的最终回答', Date.now() - 1_000));
+		s.emit('session/event', session, turnEnd(1, 'completed', Date.now()));
+	}
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'D1 null/non-number delegationDepth silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D1: 异常 delegationDepth 保守拒绝 ✓');
+}
+
+// D2: 非法 turn 号（0 / 负数 / 小数 / 非安全整数）→ createTurnTracker 全拒绝
+{
+	const tracker = createTurnTracker();
+	const session = { id: 'session-invalid-turn', header: { id: 'session-invalid-turn' } };
+	for (const turn of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
+		tracker.onTurnStart(session, { type: 'turn/start', time: 100, data: { turn } });
+		tracker.onAssistantMessage(session, { type: 'assistant/message', time: 110, data: { turn, message: { content: [{ type: 'text', text: 'x' }] } } });
+		const result = tracker.onTurnEnd(session, { type: 'turn/end', time: 120, data: { turn, reason: { kind: 'completed' } } });
+		check(result === null, 'D2 invalid turn ' + String(turn) + ' rejected', result);
+	}
+	report('D2: 非法 turn 号全拒绝 ✓');
+}
+
+// D3: session/disposed → 回收 turn 结束去重与逐 session 通知去重（同 id 复用后不再被旧状态抑制）
+{
+	const s = setup({ events: { approval: { sound: 'done' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const session = { id: 'session-disposed', header: { id: 'session-disposed' } };
+	const emitCompleteFor = (text, turn = 1) => {
+		const t0 = Date.now() - 30_000;
+		s.emit('session/event', session, turnStart(turn, t0));
+		s.emit('session/event', session, turnUserMsg(turn, text, t0 + 5));
+		s.emit('session/event', session, assistantText(turn, '最终回答', Date.now() - 1_000));
+		s.emit('session/event', session, turnEnd(turn, 'completed', Date.now()));
+	};
+	// 通知去重状态：approval 同 id 只通知一次
+	s.emit('session/event', session, approvalEvent({ id: 'req-dispose' }));
+	s.emit('session/event', session, approvalEvent({ id: 'req-dispose' }));
+	check(s.logLines().length === 1, 'D3 approval deduped before dispose', s.logLines());
+	// turn 结束去重状态：completed turn 1 只通知一次
+	emitCompleteFor('dispose 前');
+	s.emit('session/event', session, turnEnd(1, 'completed', Date.now() + 100));
+	check(s.logLines().length === 2, 'D3 complete before dispose once', s.logLines());
+	s.emit('session/disposed', session);
+	// 同 id 复用是测试专用；清理后旧 approval 键与旧 turn 号都不应再抑制新事件。
+	s.emit('session/event', session, approvalEvent({ id: 'req-dispose' }));
+	emitCompleteFor('dispose 后');
+	await sleep(GAP * 2 + 20);
+	const l = s.logLines();
+	check(l.length === 4, 'D3 state recycled after session disposed', l);
+	check(l[2].includes('🔐 approval') && l[3].includes('dispose 后'), 'D3 re-emitted after dispose', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D3: session/disposed 回收去重状态 ✓');
+}
+
+// D4: 去重容器有界（maxDedupeKeys 注入为 2；FIFO 淘汰后旧 block key 可再次通过）
+{
+	const s = setup({ events: { block: { sound: 'done' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin({ maxDedupeKeys: 2 });
+	for (const revision of [1, 2, 3, 1]) {
+		s.emit('goal/changed', { change: goalChange('block', goalView('blocked'), revision) });
+	}
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 4, 'D4 FIFO-bounded dedupe admits r1,r2,r3,r1', s.logLines());
+	check(s.bells().length === 4, 'D4 one BEL per admitted block', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D4: 去重容器有界（FIFO）✓');
+}
+
+// D5: backend 纳入 ctx.effect 生命周期 → 卸载/HMR 时取消未决第二声
+{
+	const s = setup({ events: { block: { sound: 'block' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	let disposeBackend = null;
+	s.ctx.effect = (fn) => { disposeBackend = fn(); return () => {}; };
+	s.applyPlugin();
+	s.emit('goal/changed', { change: goalChange('block', goalView('blocked')) });
+	check(typeof disposeBackend === 'function', 'D5 backend disposer registered', disposeBackend);
+	disposeBackend();
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'D5 pending second BEL cancelled by dispose', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D5: backend.dispose 纳入生命周期 ✓');
+}
+
+// D6: enabled 在 turn 中途切换 → 当前 turn 不补发，下一 turn 正常恢复
+{
+	const s = setupWithWeb({ enabled: true, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '切换前开始的回合', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(1, '切换后不应补发', Date.now() - 1_000));
+	await s.call('setEnabled', { enabled: false });
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
+	check(s.writes.length === 0, 'D6 turn ended while disabled silent', s.writes);
+	await s.call('setEnabled', { enabled: true });
+	completeTurn(s, 2, { startAgoMs: 30_000, text: '恢复后的请求' });
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1 && s.logLines()[0].includes('恢复后的请求'), 'D6 next turn notifies after re-enable', s.logLines());
+	check(s.bells().length === 1, 'D6 one BEL after re-enable', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D6: enabled 中途切换行为正确 ✓');
+}
+
+// D7: 迟到的旧 turn/end 不得清除当前新 turn 的 user/message 归属
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(2, t0));
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'aborted', t0 + 10));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(2, '新回合摘要', t0 + 20));
+	s.emit('session/event', MAIN_SESSION, assistantText(2, '新回合最终回答', Date.now() - 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(2, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	const l = s.logLines();
+	check(l.length === 1 && l[0].includes('新回合摘要'), 'D7 currentTurns preserved across stale end', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D7: 迟到旧 turn/end 不清当前 turn ✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');

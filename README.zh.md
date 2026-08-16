@@ -39,7 +39,7 @@ dsh-notify-bell 让你不必一直盯着 DSH Web 页面，也不会错过 Agent 
 - 每个事件可以独立配置声音
 - 可设置完成任务的最短通知时长
 - 音频播放失败自动 fallback
-- 零第三方运行时依赖
+- 除官方 `@deepseek-ai/schemastery` 外，无其他运行时依赖
 
 ## 平台支持
 

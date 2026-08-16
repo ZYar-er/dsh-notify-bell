@@ -143,16 +143,19 @@ export function createAudioBackend(options = {}) {
 	const spawnSyncImpl = options.spawnSync ?? defaultSpawnSync;
 	const exists = options.existsSync ?? defaultExistsSync;
 	const player = normalizePlayer(options.player, platform, spawnSyncImpl);
+	const children = new Set();
+	let disposed = false;
 
 	/** WSL 平台需要把 WSL 路径转换为 Windows 路径（wslpath -w）。 */
 	const needsPathConversion = platform === 'wsl';
 
 	/** 播放一次 sound；失败自动 fallback 到 BEL（只 fallback 一次）。 */
 	const play = (sound) => {
+		if (disposed) return;
 		const file = join(directory, SOUND_FILES[sound] ?? SOUND_FILES.default);
 		let fellBack = false;
 		const fallback = () => {
-			if (fellBack) return;
+			if (disposed || fellBack) return;
 			fellBack = true;
 			bell.play(sound);
 		};
@@ -183,8 +186,14 @@ export function createAudioBackend(options = {}) {
 		const args = player.buildArgs(target);
 		try {
 			const child = spawnImpl(player.cmd, args, { stdio: 'ignore', windowsHide: true });
-			child.on('error', fallback);
+			children.add(child);
+			const forget = () => children.delete(child);
+			child.on('error', () => {
+				forget();
+				fallback();
+			});
 			child.on('exit', (code) => {
+				forget();
 				if (code !== 0) fallback();
 			});
 		} catch {
@@ -192,5 +201,19 @@ export function createAudioBackend(options = {}) {
 		}
 	};
 
-	return { play, dispose: bell.dispose };
+	/** 停止未决播放进程并释放 fallback BEL 的未决定时器。 */
+	const dispose = () => {
+		disposed = true;
+		for (const child of children) {
+			try {
+				child?.kill?.();
+			} catch {
+				// kill 失败不阻断卸载
+			}
+		}
+		children.clear();
+		bell.dispose?.();
+	};
+
+	return { play, dispose };
 }
