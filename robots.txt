@@ -1,0 +1,7 @@
+# dsh-notify-bell sound showcase (GitHub Pages)
+# https://zyar-er.github.io/dsh-notify-bell/
+#
+# 静态展示站点，全部内容公开，允许所有爬虫索引。
+
+User-agent: *
+Allow: /
