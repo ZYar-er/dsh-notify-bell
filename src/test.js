@@ -1437,11 +1437,11 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(closeOnOutside(false, { nodeType: 1 }, button, popover) === false, 'U6 closed ignores', closeOnOutside(false, { nodeType: 1 }, button, popover));
 	report('U6: 外部点击关闭 ✓');
 
-	// U7: Popover 主题 —— 全语义 token（无硬编码颜色）
+	// U7: Popover 主题 —— DSH 官方 menu surface token（无硬编码颜色）
 	const { POPOVER_CSS } = loaded;
-	check(typeof POPOVER_CSS === 'string' && POPOVER_CSS.includes('--dsw-alias-bg-overlay') && POPOVER_CSS.includes('--dsw-alias-brand-primary'), 'U7 semantic tokens', POPOVER_CSS.slice(0, 60));
+	check(typeof POPOVER_CSS === 'string' && POPOVER_CSS.includes('--dsw-specific-menu') && POPOVER_CSS.includes('--dsw-shadow-lv3') && POPOVER_CSS.includes('--dsw-alias-border-inverted'), 'U7 official menu tokens', POPOVER_CSS.slice(0, 120));
+	check(POPOVER_CSS.includes('--dsw-alias-brand-primary') && POPOVER_CSS.includes('--dsw-alias-state-error-primary'), 'U7 brand/error tokens', 'ok');
 	check(!/#[0-9a-fA-F]{3,8}/.test(POPOVER_CSS), 'U7 no hard-coded colors', POPOVER_CSS.match(/#[0-9a-fA-F]{3,8}/));
-	check(POPOVER_CSS.includes('role="dialog"') === false && POPOVER_CSS.includes('.nb-popover'), 'U7 popover css present', 'ok');
 	report('U7: Popover 主题 token ✓');
 
 	// U8: 中英文案键完整

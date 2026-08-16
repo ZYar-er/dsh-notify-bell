@@ -41,9 +41,11 @@ window.__ModuleLoader__.load({
 			".nb-bell-toggle svg{flex:none}",
 			".nb-bell-toggle:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}"
 		].join("\n");
-		// popover：右对齐浮层，紧凑、不遮挡主要内容；全部语义 token（浅色/深色自适应）。
+		// popover：右对齐浮层，紧凑、不遮挡主要内容。token 组合与 DSH 官方
+		// menu surface 一致（--dsw-specific-menu / shadow-lv3 / border-inverted），
+		// 浅色/深色由 body[data-ds-dark-theme] 的 token 覆盖自动适配。
 		var POPOVER_CSS = [
-			".nb-popover{box-sizing:border-box;position:absolute;top:calc(100% + 6px);right:0;z-index:1200;width:220px;max-width:calc(100vw - 24px);background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:6px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);text-align:left}",
+			".nb-popover{box-sizing:border-box;position:absolute;top:calc(100% + 4px);right:0;z-index:1200;width:220px;max-width:calc(100vw - 24px);padding:6px;display:flex;flex-direction:column;gap:2px;background:var(--dsw-specific-menu);border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);text-align:left}",
 			".nb-popover-title{font-size:12px;font-weight:600;line-height:1.2;margin:6px 6px 4px;color:var(--dsw-alias-label-dimmed)}",
 			".nb-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}",
 			".nb-row svg{flex:none;width:16px;height:16px;color:var(--dsw-alias-label-secondary)}",
