@@ -1,5 +1,7 @@
 # dsh-notify-bell bundle layer（官方 bundle patch，见 DSH 文档 develop/basic/publish）
+# version: 0.12.0（静态注释，bump 版本时与 package.json 同步更新）
 # 由 dsh plugin add 安装时应用：向 profile 组合插入本插件行。
+# name 必须是 npm 包名（Node 解析），不能携带 @version。
 - insert:
     - id: notify-bell
       name: 'dsh-notify-bell'
