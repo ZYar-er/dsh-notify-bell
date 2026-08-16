@@ -164,8 +164,10 @@ README 封面（深色科技风横幅，兼作 GitHub 分享卡片 og:image）�
 
 规则：
 
-* README.md 顶部首图用 `dsh-notify-bell-cover/readme-cover.png`；
-  README.zh.md 用 `dsh-notify-bell-cover/readme-cover.zh.png`
+* 两份 README 的首图都用**绝对 raw URL**
+  （`https://raw.githubusercontent.com/ZYar-er/dsh-notify-bell/main/...`），
+  这样 GitHub 与 npm 页面都能显示，且无需把封面目录加进 npm files 白名单；
+  README.md → `readme-cover.png`，README.zh.md → `readme-cover.zh.png`
 * 品牌名/标语/功能描述变化时，同步更新两个 SVG，并按 2x（2560×1280）
   重新导出两个 PNG（如
   `rsvg-convert -w 2560 -h 1280 readme-cover.svg -o readme-cover.png`）
@@ -211,6 +213,8 @@ Release version:
 * sound-showcase 页面版本
 * GitHub Release notes（如果能访问）
 * npm 发布说明（如果有）
+* GitHub 仓库 About Description（当前为中英双语，英文在前、中文在后）
+* package.json description（发布前核对，与 About 描述保持一致）
 
 搜索旧版本号，例如：
 
