@@ -1,5 +1,5 @@
 /**
- * dsh-notify-bell v5 — 全量测试（approval 通知 + 语义化 sound）。
+ * dsh-notify-bell v0.10 — 全量测试（approval/question 通知 + 官方 Config schema）。
  *
  * 配置测试（loadConfig / sanitizeConfig / defaultConfigPath）：
  *   C1 默认配置深比较（含 approval、permissionGapMs）
@@ -31,6 +31,9 @@
  *   N4 旧 bellCount 兼容 / N4b 旧 bellCount 行为 / N5 soundPack
  *   N6 BEL backend 映射 / N7 events.js 无 bellCount / N8 配置层无 bellCount
  *
+ * v0.10 新增：
+ *   S1-S6 官方 Config schema（默认值/校验 fail loudly）+ mergeConfig 优先级
+ *
  * v5 新增：
  *   A1 approval/asked → 🔐 日志 + permission（2 声）
  *   A2 approval/decided → 不通知
@@ -47,7 +50,7 @@ import { mkdtempSync, writeFileSync, rmSync, readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { tmpdir, homedir } from 'node:os';
 import { join } from 'node:path';
-import { loadConfig, sanitizeConfig, defaultConfigPath, DEFAULT_CONFIG, cloneDefaults, SEMANTIC_SOUNDS } from './config.js';
+import { loadConfig, sanitizeConfig, defaultConfigPath, DEFAULT_CONFIG, cloneDefaults, SEMANTIC_SOUNDS, Config, mergeConfig, explicitFields } from './config.js';
 import { createBellBackend } from './bell.js';
 import { createWavBackend, detectPlatform, detectWindowsPlayer, detectLinuxPlayer, detectPlayerFor } from './wav.js';
 import { writeEnabled } from './config.js';
@@ -74,7 +77,7 @@ function setup(configObj) {
 	const listeners = new Map();
 	const ctx = { on: (event, handler) => listeners.set(event, handler), inject: () => {} };
 	const emit = (event, ...args) => listeners.get(event)(...args);
-	const applyPlugin = (extra = {}) => apply(ctx, {
+	const applyPlugin = (extra = {}) => apply(ctx, {}, {
 		configPath: file,
 		write: (chunk) => writes.push({ t: Date.now(), c: String(chunk) }),
 		isTTY: () => tty,
@@ -789,7 +792,7 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const spawned = [];
 	const s = setup({ enabled: false, soundPack: 'wav', wav: { directory: '/tmp/x' }, bell: { gapMs: GAP, permissionGapMs: GAP } });
-	apply(s.ctx, {
+	apply(s.ctx, {}, {
 		configPath: s.file,
 		write: (c) => s.writes.push({ t: Date.now(), c: String(c) }),
 		isTTY: () => tty,
@@ -836,7 +839,7 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const spawned = [];
 	const s = setup({ soundPack: 'wav', wav: { directory: '/tmp/sounds' }, bell: { gapMs: GAP, permissionGapMs: GAP } });
-	apply(s.ctx, {
+	apply(s.ctx, {}, {
 		configPath: s.file,
 		write: (c) => s.writes.push({ t: Date.now(), c: String(c) }),
 		isTTY: () => tty,
@@ -1210,7 +1213,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 {
 	const spawned = [];
 	const s = setup({ soundPack: 'wav', wav: { directory: '/tmp/sounds' }, bell: { gapMs: GAP, permissionGapMs: GAP } });
-	apply(s.ctx, {
+	apply(s.ctx, {}, {
 		configPath: s.file,
 		write: (c) => s.writes.push({ t: Date.now(), c: String(c) }),
 		isTTY: () => tty,
@@ -1358,6 +1361,85 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(s.logLines().length === 1, 'Q10 log kept', s.logLines());
 	rmSync(s.dir, { recursive: true, force: true });
 	report('Q10: 非 TTY 行为保持 ✓');
+}
+
+// ---------- S: 官方 Config schema + 配置合并（v0.10 规范化） ----------
+// S1: Config({}) 默认值与 DEFAULT_CONFIG 完全一致
+{
+	const fromSchema = JSON.parse(JSON.stringify(Config({})));
+	check(JSON.stringify(fromSchema) === JSON.stringify(DEFAULT_CONFIG), 'S1 schema defaults == DEFAULT_CONFIG', fromSchema);
+	report('S1: Config schema 默认值 == DEFAULT_CONFIG ✓');
+}
+
+// S2: Config fail loudly（非法配置抛 ValidationError，而非静默回退）
+{
+	let threw = false;
+	try { Config({ soundPack: 'webhook' }); } catch { threw = true; }
+	check(threw, 'S2 invalid soundPack throws', threw);
+	let threw2 = false;
+	try { Config({ events: { complete: { sound: 'nope' } } }); } catch { threw2 = true; }
+	check(threw2, 'S2 invalid sound throws', threw2);
+	let threw3 = false;
+	try { Config({ minDuration: 'abc' }); } catch { threw3 = true; }
+	check(threw3, 'S2 invalid minDuration throws', threw3);
+	report('S2: Config schema fail loudly ✓');
+}
+
+// S3: Config 填默认 + 保留合法值（对象校验）
+{
+	const c = Config({ enabled: false, events: { complete: { sound: 'block' } }, bell: { gapMs: 200 } });
+	check(c.enabled === false && c.minDuration === 10, 'S3 keeps value + fills default', c);
+	check(c.events.complete.sound === 'block' && c.events.block.sound === 'block', 'S3 event sound kept/default', c);
+	check(c.events.question.sound === 'question' && c.bell.gapMs === 200 && c.bell.permissionGapMs === 300, 'S3 nested defaults', c);
+	check(c.soundPack === 'default' && c.wav.fallback === 'bell', 'S3 union defaults', c);
+	report('S3: Config 填默认 + 保留合法值 ✓');
+}
+
+// S4: explicitFields 只提取与默认不同的字段
+{
+	check(JSON.stringify(explicitFields({})) === '{}', 'S4 empty config → no explicit fields', explicitFields({}));
+	check(JSON.stringify(explicitFields(Config({}))) === '{}', 'S4 schema-filled defaults → no explicit fields', explicitFields(Config({})));
+	const e = explicitFields(Config({ minDuration: 5, events: { question: { sound: 'error' } } }));
+	check(JSON.stringify(e) === JSON.stringify({ minDuration: 5, events: { question: { sound: 'error' } } }), 'S4 explicit diff only', e);
+	const e2 = explicitFields(Config({ enabled: false }));
+	check(JSON.stringify(e2) === JSON.stringify({ enabled: false }), 'S4 enabled explicit', e2);
+	report('S4: explicitFields 差异提取 ✓');
+}
+
+// S5: mergeConfig 优先级（cordis 显式 > 文件 > 默认）
+{
+	const fileCfg = sanitizeConfig({ enabled: false, minDuration: 3, events: { complete: { sound: 'permission' } } });
+	// 文件生效：cordis 无显式字段
+	const m1 = mergeConfig(Config({}), fileCfg);
+	check(m1.enabled === false && m1.minDuration === 3 && m1.events.complete.sound === 'permission', 'S5 file layer wins over defaults', m1);
+	// cordis 显式覆盖文件
+	const m2 = mergeConfig(Config({ minDuration: 60 }), fileCfg);
+	check(m2.minDuration === 60 && m2.enabled === false, 'S5 explicit cordis wins over file', m2);
+	// 深层覆盖
+	const m3 = mergeConfig(Config({ events: { complete: { sound: 'error' } } }), fileCfg);
+	check(m3.events.complete.sound === 'error' && m3.events.block.sound === 'block', 'S5 deep explicit wins', m3);
+	// 文件 bellCount 兼容仍在（经 sanitize）
+	const m4 = mergeConfig(Config({}), sanitizeConfig({ events: { complete: { bellCount: 1 }, block: { bellCount: 2 } } }));
+	check(m4.events.complete.sound === 'done' && m4.events.block.sound === 'permission', 'S5 bellCount legacy kept', m4);
+	report('S5: mergeConfig 优先级 ✓');
+}
+
+// S6: apply 第二参数（cordis config）显式字段生效（行为级）
+{
+	const s = setup({ minDuration: 10, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	apply(s.ctx, { minDuration: 100000 }, {
+		configPath: s.file,
+		write: (c) => s.writes.push({ t: Date.now(), c: String(c) }),
+		isTTY: () => tty,
+		warn: (m) => s.warns.push(m)
+	});
+	// 30s 的 complete：cordis 显式 minDuration=100000s → 不响（仅日志）
+	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 0, 'S6 cordis minDuration honored', s.bells());
+	check(s.logLines().length === 1, 'S6 log still emitted', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('S6: apply 第二参数（cordis 显式配置）生效 ✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');

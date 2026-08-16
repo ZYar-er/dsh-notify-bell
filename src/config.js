@@ -1,12 +1,18 @@
 /**
- * dsh-notify-bell — 配置加载模块（v6：WAV soundPack + 语义化 sound）。
+ * dsh-notify-bell — 配置模块（v0.10：官方 Config schema + cordis 配置合并）。
  *
- * 配置来源：`~/.config/dsh/notify-bell.json`（可用环境变量
- * `DSH_NOTIFY_BELL_CONFIG` 覆盖路径）。文件不存在时使用内置默认值；
- * JSON 非法时打印 warning 并回退默认值；字段级类型校验，非法字段
- * 静默回退默认值。零第三方依赖（node:fs / node:os / node:path）。
+ * 配置来源（按优先级）：
+ *   1. Cordis 配置（cordis.yml 的 config 字段，经 `Config` schema 校验，
+ *      仅"显式设置"的字段参与合并——与内置默认值不同的字段）。
+ *   2. `~/.config/dsh/notify-bell.json` legacy 文件（可用环境变量
+ *      `DSH_NOTIFY_BELL_CONFIG` 覆盖路径；Web 开关的运行时状态也写在这里）。
+ *   3. 内置默认值（schema 默认 == DEFAULT_CONFIG）。
  *
- * 事件层只暴露语义化 sound（done / block / permission / error / default）；
+ * 文件不存在时使用内置默认值；JSON 非法时打印 warning 并回退默认值；
+ * 字段级类型校验，非法字段静默回退默认值。零第三方运行时依赖
+ * （node:fs / node:os / node:path；schema 使用 DSH 自带的 @deepseek-ai/schemastery）。
+ *
+ * 事件层只暴露语义化 sound（done / block / permission / error / question）；
  * "响几声/什么节奏/播什么文件"由 backend 内部决定（bell.js / wav.js）。
  * soundPack 选择 backend：'default' → BEL；'wav' → 本地 WAV 文件播放
  * （失败自动 fallback 到 BEL）。旧版 `bellCount` 配置仍然兼容：
@@ -16,6 +22,7 @@
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
+import Schema from '@deepseek-ai/schemastery';
 
 /** 语义化 sound 词汇表（事件层唯一的声音语义）。 */
 export const SEMANTIC_SOUNDS = Object.freeze(['done', 'block', 'permission', 'question', 'error', 'default']);
@@ -70,6 +77,92 @@ export const DEFAULT_CONFIG = Object.freeze({
 /** 深拷贝默认配置（调用方可以安全修改返回值）。 */
 export function cloneDefaults() {
 	return JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+}
+
+/**
+ * 官方 Cordis `Config` schema（Schemastery，Standard Schema 接口）。
+ *
+ * Cordis 加载插件时用它校验 cordis.yml 的 config 并填充默认值：
+ * 非法配置在加载期 fail loudly（抛 ValidationError），而不是静默回退。
+ * 默认值必须与 DEFAULT_CONFIG 保持一致（测试断言两者深相等）。
+ */
+const eventSchema = (defaultSound) => Schema.object({
+	enabled: Schema.boolean().default(true),
+	sound: Schema.union([...SEMANTIC_SOUNDS]).default(defaultSound)
+});
+
+export const Config = Schema.object({
+	enabled: Schema.boolean().default(true),
+	minDuration: Schema.number().default(10),
+	objective: Schema.object({
+		maxLength: Schema.number().default(120)
+	}),
+	events: Schema.object({
+		complete: eventSchema('done'),
+		block: eventSchema('block'),
+		approval: eventSchema('permission'),
+		question: eventSchema('question'),
+		error: eventSchema('error')
+	}),
+	soundPack: Schema.union([...VALID_SOUND_PACKS]).default('default'),
+	wav: Schema.object({
+		directory: Schema.string().default('~/.config/dsh/notify-bell/sounds'),
+		fallback: Schema.union([...VALID_WAV_FALLBACKS]).default('bell')
+	}),
+	bell: Schema.object({
+		gapMs: Schema.number().default(150),
+		permissionGapMs: Schema.number().default(300)
+	})
+});
+
+/** 递归合并：over 的字段覆盖 base（undefined 值跳过），返回新对象。 */
+function deepMerge(base, over) {
+	const out = { ...base };
+	for (const key of Object.keys(over)) {
+		const value = over[key];
+		if (value === undefined) continue;
+		if (isPlainObject(value) && isPlainObject(out[key])) {
+			out[key] = deepMerge(out[key], value);
+		} else {
+			out[key] = value;
+		}
+	}
+	return out;
+}
+
+/**
+ * 从 Cordis 校验后的配置中提取"用户显式设置"的字段（与 defaults 不同的
+ * 叶子值），返回只含差异的部分对象（结构同 config）。schema 默认值已
+ * 被 Cordis 填充，因此"与默认相同"的字段视为未显式设置。
+ */
+export function explicitFields(config, defaults = DEFAULT_CONFIG) {
+	const out = {};
+	for (const key of Object.keys(defaults)) {
+		const fallback = defaults[key];
+		const value = config?.[key];
+		if (isPlainObject(fallback)) {
+			if (isPlainObject(value)) {
+				const sub = explicitFields(value, fallback);
+				if (Object.keys(sub).length > 0) out[key] = sub;
+			} else if (value !== undefined && value !== fallback) {
+				out[key] = value;
+			}
+		} else if (value !== undefined && value !== fallback) {
+			out[key] = value;
+		}
+	}
+	return out;
+}
+
+/**
+ * 合并配置层：legacy 文件配置为 base，Cordis 显式字段覆盖它。
+ * 最终结果再经 sanitizeConfig 兜底（类型校验 + bellCount 兼容）。
+ * @param cordisConfig - Cordis 传入的配置（schema 校验 + 默认填充）。
+ * @param fileConfig - loadConfig 的 legacy 文件配置（sanitize 后的完整值）。
+ */
+export function mergeConfig(cordisConfig, fileConfig) {
+	const explicit = explicitFields(cordisConfig ?? {});
+	return sanitizeConfig(deepMerge(fileConfig, explicit));
 }
 
 /** 解析配置路径：环境变量覆盖优先，否则 <home>/.config/dsh/notify-bell.json。 */

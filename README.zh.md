@@ -4,7 +4,7 @@
 
 为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
 
-> **Developer Preview · v0.9.0**
+> **Developer Preview · v0.10.0**
 
 🎧 **[试听通知声音 →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
@@ -23,6 +23,7 @@ dsh-notify-bell 让你不必一直盯着 DSH Web 页面，也不会错过 Agent 
 ## 特性
 
 - 支持完成、审批、提问、受阻、错误五种语义通知
+- 官方 Cordis 插件规范：导出 `Config` schema（非法配置加载即失败）+ `dsh.bundle` patch
 - WAV 声音包
 - BEL 提示音 fallback
 - Windows 原生音频播放
@@ -75,25 +76,59 @@ WAV 无法播放时，如果存在可用 TTY，则自动 fallback 到终端 BEL�
 
 ## 安装
 
-将插件安装到 DSH Web profile：
+插件遵循官方 DSH 插件规范（见
+[插件教程](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)）：
+它是声明了 `dsh.bundle` 的 Cordis bundle，自带 `cordis.patch.yml`，
+导出 `Config` schema，使用官方 CLI 安装。在仓库检出目录中：
 
 ```bash
-dsh plugin --profile web add <plugin-package>
+dsh plugin --profile web add ./dsh-notify-bell
 ```
 
-然后在 Web profile 中启用插件。
+也可以直接从 GitHub 安装（安装的是源码，建议固定 commit 以保证供应链安全）：
 
-具体安装命令可能会随着发布渠道调整。
+```bash
+dsh plugin --profile web add github:zyar-er/dsh-notify-bell
+```
+
+`dsh plugin add` 会 link 包并把它追加到 profile 的
+`dsh.profile.bundles`，下次启动时自动应用 bundle 层，无需手动修改
+patch 文件。
 
 ## 配置
 
-配置文件：
+插件导出 Schemastery `Config` schema：Cordis 在加载时校验插件行的
+`config` 并填充默认值，非法配置会直接加载失败（fail loudly），
+而不是被静默忽略。
 
-```text
-~/.config/dsh/notify-bell.json
+### 通过 profile patch 配置（推荐）
+
+在 profile 的 `cordis.patch.yml`（或你自己的 `--patch` 覆盖层）中为
+插件行添加 `config`：
+
+```yaml
+- id: notify-bell
+  config:
+    minDuration: 10
+    soundPack: wav
+    events:
+      complete:
+        sound: done
+      block:
+        sound: block
 ```
 
-示例：
+### 通过 legacy 配置文件
+
+插件同时读取 `~/.config/dsh/notify-bell.json`（可用环境变量
+`DSH_NOTIFY_BELL_CONFIG` 覆盖路径）。该文件是运行时状态层：Web 铃铛
+开关把 `enabled` 持久化到这里，也保证旧部署继续可用。合并优先级：
+
+```text
+cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
+```
+
+示例文件：
 
 ```json
 {
@@ -271,7 +306,7 @@ semantic sound
 
 当前测试：
 
-**79/79 通过**
+**85/85 通过**
 
 已经完成真实验证：
 

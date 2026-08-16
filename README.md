@@ -4,7 +4,7 @@
 
 Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
-> **Developer Preview · v0.9.0**
+> **Developer Preview · v0.10.0**
 
 🎧 **[Listen to the notification sounds →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
@@ -23,6 +23,7 @@ Each event uses a distinct semantic sound rather than encoding meaning by counti
 ## Features
 
 - Semantic notifications for complete, approval, question, block, and error events
+- Official Cordis plugin form: exported `Config` schema (fail-loud validation) + `dsh.bundle` patch
 - WAV sound pack
 - BEL fallback
 - Native Windows audio support
@@ -71,25 +72,62 @@ Audio playback failures never crash DSH.
 
 ## Installation
 
-Install the plugin into the DSH Web profile:
+The plugin follows the official DSH plugin format (see the
+[plugin tutorials](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)):
+it is a Cordis bundle that declares its own `cordis.patch.yml` via
+`dsh.bundle`, exports a `Config` schema, and installs with the official
+CLI. From a checkout of this repository:
 
 ```bash
-dsh plugin --profile web add <plugin-package>
+dsh plugin --profile web add ./dsh-notify-bell
 ```
 
-Enable it in your Web profile configuration.
+Or install straight from GitHub (sources only, so pin a commit for
+supply-chain safety):
 
-The exact installation command may vary depending on how the package is published.
+```bash
+dsh plugin --profile web add github:zyar-er/dsh-notify-bell
+```
+
+`dsh plugin add` links the package and appends it to the profile's
+`dsh.profile.bundles`, so the bundle layer is applied automatically on the
+next boot. No manual patch editing is required.
 
 ## Configuration
 
-Configuration file:
+The plugin exports a Schemastery `Config` schema: Cordis validates the
+`config` of the plugin row and fills defaults at load time, and invalid
+values fail loudly instead of being silently ignored.
 
-```text
-~/.config/dsh/notify-bell.json
+### Via the profile patch (recommended)
+
+Add a `config` block to the plugin row in your profile's
+`cordis.patch.yml` (or your own `--patch` overlay):
+
+```yaml
+- id: notify-bell
+  config:
+    minDuration: 10
+    soundPack: wav
+    events:
+      complete:
+        sound: done
+      block:
+        sound: block
 ```
 
-Example:
+### Via the legacy config file
+
+The plugin also reads `~/.config/dsh/notify-bell.json` (override with the
+`DSH_NOTIFY_BELL_CONFIG` environment variable). This file is the
+runtime-state layer: the Web UI bell toggle persists `enabled` here, and
+it keeps older deployments working. Merge priority is:
+
+```text
+explicit cordis.yml config  >  notify-bell.json  >  schema defaults
+```
+
+Example file:
 
 ```json
 {
@@ -257,7 +295,7 @@ This makes it possible to add other backends later without changing the DSH even
 
 Current test suite:
 
-**79/79 tests passing**
+**85/85 tests passing**
 
 Real-world verification has been completed for:
 

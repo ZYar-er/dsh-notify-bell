@@ -1,51 +1,67 @@
 /**
- * dsh-notify-bell v5 — 任务完成/受阻/审批/出错终端通知插件（语义化 sound）。
+ * dsh-notify-bell — 任务完成/受阻/审批/提问/出错通知插件（语义化 sound）。
+ *
+ * 官方 Cordis 插件形态（见 DSH 文档 develop/basic）：
+ *   - 导出 `name`、`inject`（无服务依赖）、`Config`（Schemastery schema，
+ *     Cordis 用它校验 cordis.yml 的 config 并填充默认值）。
+ *   - `apply(ctx, config)`：config 来自 Cordis 配置层；legacy 文件
+ *     （~/.config/dsh/notify-bell.json）作为低优先级层合并（见 config.js）。
+ *   - 通过 ctx 注册的监听/inject 在插件卸载时自动清理。
  *
  * 结构（便于以后扩展 wav/webhook 等后端）：
- *   - config.js  配置加载（sound 解析/校验、旧 bellCount 兼容、soundPack）
+ *   - config.js  配置 schema/合并（sound 解析/校验、旧 bellCount 兼容、soundPack）
  *   - events.js  事件分类（输出事件类型 + 默认语义 sound，不含响铃细节）
  *   - bell.js    BEL 后端（play(sound)，内部维护 sound → count/gap 映射）
+ *   - wav.js     WAV 后端（Windows/WSL/Linux，失败 fallback BEL）
  *   - log.js     日志后端（stdout 输出 + maxLength 截断）
  *
- * 事件语义（受配置文件 events.* 控制）：
+ * 事件语义（受配置 events.* 控制）：
  *   - complete：duration >= minDuration 时播放 events.complete.sound
  *     （默认 done）；耗时不足只输出日志。duration = now - goal.createdAt。
  *   - block：不受 minDuration 限制，播放 events.block.sound（默认 block）。
  *   - approval：session/event 的 approval/asked（权限问题被提出）时播放
  *     events.approval.sound（默认 permission），不受 minDuration 限制；
  *     approval/decided 不触发通知。
+ *   - question：session/event 的 tool/call + ask_user_question 时播放
+ *     events.question.sound（默认 question），不受 minDuration 限制；
+ *     普通文本问号不触发。
  *   - error：agent/error（step/turn 出错）播放 events.error.sound（默认 error）。
  *   - 其余操作（create/edit/pause/resume/clear 等）不产生任何输出。
  *
  * 行为：
  *   - enabled=false 时全部通知关闭（不影响 DSH 自身）。
  *   - 防重复：同一 change.ref（goal id@revision）、同一 error
- *     （agent id@turn@step）、同一 approval（session id@approval id）只通知一次。
+ *     （agent id@turn@step）、同一 approval（session id@approval id）、
+ *     同一 question（session id@callId）只通知一次。
  *   - objective/错误消息按 objective.maxLength（默认 120）截断。
  *   - BEL 只在 process.stdout.isTTY 时写入；日志行始终输出。
- *   - soundPack 目前仅支持 "default"（BEL）；wav/webhook 后端未来接入。
- *   - 零第三方依赖。
+ *   - soundPack 目前支持 "default"（BEL）与 "wav"（本地音频）。
  *
  * @param ctx - Cordis 上下文。
+ * @param config - Cordis 配置（schema 校验 + 默认填充）。
  * @param options - 可选注入（测试用）：configPath（配置文件路径）、
  *   warn（warning 输出）、write（stdout 写入）、isTTY（TTY 判断）。
  */
-import { loadConfig, writeEnabled } from './config.js';
+import { loadConfig, writeEnabled, mergeConfig } from './config.js';
 import { createBellBackend } from './bell.js';
 import { createWavBackend } from './wav.js';
 import { createLogBackend } from './log.js';
 import { classifyGoalChange, classifyApproval, classifyQuestion, classifyAgentError } from './events.js';
+
+export { Config } from './config.js';
 
 export const name = 'notify-bell';
 
 /** 本插件只消费事件，不依赖任何服务。 */
 export const inject = [];
 
-export function apply(ctx, options = {}) {
-	const { config, path } = loadConfig({
+export function apply(ctx, config = {}, options = {}) {
+	const { config: fileConfig, path } = loadConfig({
 		configPath: options.configPath,
 		warn: options.warn ?? ((message) => process.stderr.write(message + '\n'))
 	});
+	// 合并层：Cordis 显式字段 > legacy 文件 > schema 默认（见 config.js）。
+	config = mergeConfig(config, fileConfig);
 	const persistEnabled = options.writeEnabled ?? writeEnabled;
 	/** 运行时 enabled 状态（Web 开关可立即改变，无需重启）。 */
 	let enabled = config.enabled;
