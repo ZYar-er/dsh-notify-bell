@@ -1,5 +1,5 @@
 /**
- * dsh-notify-bell v0.10 — 全量测试（approval/question 通知 + 官方 Config schema）。
+ * dsh-notify-bell v0.11 — 全量测试（final-answer completion + approval/question + Config schema）。
  *
  * 配置测试（loadConfig / sanitizeConfig / defaultConfigPath）：
  *   C1 默认配置深比较（含 approval、permissionGapMs）
@@ -30,6 +30,10 @@
  *   N1 默认配置 sound / N2 自定义 sound / N3 未知 sound 回退
  *   N4 旧 bellCount 兼容 / N4b 旧 bellCount 行为 / N5 soundPack
  *   N6 BEL backend 映射 / N7 events.js 无 bellCount / N8 配置层无 bellCount
+ *
+ * v0.11 新增：
+ *   T1-T24 turn/end(completed) 完成语义（时长/去重/子代理过滤/摘要/
+ *   goal complete 静音/联动/backend）
  *
  * v0.10 新增：
  *   S1-S6 官方 Config schema（默认值/校验 fail loudly）+ mergeConfig 优先级
@@ -103,6 +107,21 @@ const goalView = (phase, { createdAtMs = Date.now() - 30_000, objective = '为 d
 });
 const goalChange = (operation, goal, revision = 3) => ({ operation, ref: { id: GOAL_ID, revision }, ...(goal ? { goal } : {}) });
 const MOCK_SESSION = { id: 'session-1' };
+
+// ---------- v0.11 turn 基建（final-answer completion） ----------
+const MAIN_SESSION = { id: 'session-main', header: { id: 'session-main', delegationDepth: 0 } };
+const SUB_SESSION = { id: 'session-sub', header: { id: 'session-sub', delegationDepth: 1 } };
+const turnStart = (turn, time) => ({ type: 'turn/start', time, data: { turn } });
+const turnUserMsg = (turn, text, time) => ({ type: 'user/message', time, data: { content: [{ type: 'text', text }], source: { kind: 'user' }, role: 'user', id: 'm-' + turn } });
+const turnEnd = (turn, reason, time) => ({ type: 'turn/end', time, data: { turn, reason: { kind: reason } } });
+/** 完成一轮：turn/start → user/message → turn/end(completed)。默认 30s 时长。 */
+const completeTurn = (s, turn, opts = {}) => {
+	const now = opts.endTime ?? Date.now();
+	const start = now - (opts.startAgoMs ?? 30_000);
+	s.emit('session/event', MAIN_SESSION, turnStart(turn, start));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(turn, opts.text ?? '为 deepseek harness 制作通知插件', start + 5));
+	s.emit('session/event', MAIN_SESSION, turnEnd(turn, 'completed', now));
+};
 const approvalEvent = (overrides = {}) => ({
 	type: 'approval/asked',
 	data: { id: 'req-1', toolName: 'bash', reason: '需要提升权限', ...overrides }
@@ -209,11 +228,11 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { createdAtMs: Date.now() - 30_000 })) });
+	completeTurn(s, 1, { startAgoMs: 30_000 });
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'B2 one BEL', s.bells());
 	const l = s.logLines();
-	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): 为 deepseek harness 制作通知插件', 'B2 log format', l);
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): 为 deepseek harness 制作通知插件 (turn #1)', 'B2 log format', l);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('B2: complete>minDuration 响 1 声（done）✓');
 }
@@ -222,11 +241,11 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { createdAtMs: Date.now() - 2_000 })) });
+	completeTurn(s, 1, { startAgoMs: 2_000 });
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0, 'B3 no BEL', s.bells());
 	const l = s.logLines();
-	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (2s): 为 deepseek harness 制作通知插件', 'B3 short log', l);
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (2s): 为 deepseek harness 制作通知插件 (turn #1)', 'B3 short log', l);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('B3: complete<minDuration 不响 ✓');
 }
@@ -248,9 +267,8 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	const change = goalChange('complete', goalView('complete'));
-	s.emit('goal/changed', { change });
-	s.emit('goal/changed', { change });
+	completeTurn(s, 1);
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now() + 100));
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'B5 one BEL', s.bells());
 	check(s.logLines().length === 1, 'B5 one log', s.logLines());
@@ -262,11 +280,11 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { objective: '字'.repeat(150) })) });
+	completeTurn(s, 1, { text: '字'.repeat(150) });
 	await sleep(GAP * 2 + 20);
 	const l = s.logLines();
-	const objPart = l[0]?.split(': ')[1];
-	check(objPart?.length === 121 && objPart.endsWith('…') && objPart.slice(0, 120) === '字'.repeat(120), 'B6 truncated 120+…', objPart?.length);
+	const summary = l[0]?.split(': ')[1]?.split(' (turn #')[0];
+	check(summary?.length === 121 && summary.endsWith('…') && summary.slice(0, 120) === '字'.repeat(120), 'B6 truncated 120+…', summary?.length);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('B6: objective 截断 ✓');
 }
@@ -276,7 +294,7 @@ const approvalEvent = (overrides = {}) => ({
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	tty = false;
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 2 + 20);
 	tty = true;
 	check(s.bells().length === 0, 'B7 no BEL non-TTY', s.bells());
@@ -289,7 +307,7 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ minDuration: 20, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { createdAtMs: Date.now() - 15_000 })) });
+	completeTurn(s, 1, { startAgoMs: 15_000 });
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0, 'B8 no BEL under custom minDuration', s.bells());
 	check(s.logLines().length === 1 && s.logLines()[0].includes('✓ completed (15s)'), 'B8 log kept', s.logLines());
@@ -301,7 +319,7 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ events: { complete: { sound: 'permission' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 3 + 30);
 	check(s.bells().length === 2, 'B9 two BEL (permission)', s.bells());
 	rmSync(s.dir, { recursive: true, force: true });
@@ -349,7 +367,7 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ enabled: false, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	s.emit('goal/changed', { change: goalChange('block', goalView('blocked')) });
 	s.emit('session/event', MOCK_SESSION, approvalEvent());
 	s.emit('agent/error', { agent: { id: 'agent-1' }, turn: 1, step: 1, error: new Error('x') });
@@ -375,11 +393,11 @@ const approvalEvent = (overrides = {}) => ({
 {
 	const s = setup({ objective: { maxLength: 5 }, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { objective: '一个非常长的目标描述' })) });
+	completeTurn(s, 1, { text: '一个非常长的目标描述' });
 	await sleep(GAP * 2 + 20);
 	const l = s.logLines();
-	const objPart = l[0]?.split(': ')[1];
-	check(objPart === '一个非常长…', 'B14 custom maxLength', objPart);
+	const summary = l[0]?.split(': ')[1]?.split(' (turn #')[0];
+	check(summary === '一个非常长…', 'B14 custom maxLength', summary);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('B14: objective.maxLength 自定义 ✓');
 }
@@ -413,7 +431,7 @@ const approvalEvent = (overrides = {}) => ({
 	const { config } = loadConfig({ configPath: s.file });
 	check(config.events.complete.sound === 'permission', 'N2 config sound', config.events.complete.sound);
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 3 + 30);
 	check(s.bells().length === 2, 'N2 custom sound -> 2 BEL', s.bells());
 	rmSync(s.dir, { recursive: true, force: true });
@@ -429,7 +447,7 @@ const approvalEvent = (overrides = {}) => ({
 	check(config.events.approval.sound === 'permission', 'N3 approval fallback', config.events.approval.sound);
 	check(config.events.error.sound === 'error', 'N3 error fallback', config.events.error.sound);
 	s.applyPlugin();
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'N3 fallback -> 1 BEL', s.bells());
 	rmSync(s.dir, { recursive: true, force: true });
@@ -498,8 +516,7 @@ const approvalEvent = (overrides = {}) => ({
 // N7: events.js 不依赖 bellCount（分类输出只有 sound）
 {
 	const complete = classifyGoalChange(goalChange('complete', goalView('complete')));
-	check(complete?.kind === 'complete' && complete.sound === 'done', 'N7 classify complete sound', complete);
-	check('bellCount' in complete === false, 'N7 no bellCount in classify', complete);
+	check(complete === null, 'N7 goal complete no longer classifies (turn/end owns completion)', complete);
 	const block = classifyGoalChange(goalChange('block', goalView('blocked')));
 	check(block?.kind === 'block' && block.sound === 'block', 'N7 classify block sound', block);
 	check('bellCount' in block === false, 'N7 no bellCount in classify block', block);
@@ -801,7 +818,7 @@ const approvalEvent = (overrides = {}) => ({
 		existsSync: () => true,
 		player: { cmd: 'powershell.exe' }
 	});
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 2 + 20);
 	check(s.writes.length === 0, 'W6 no output', s.writes);
 	check(spawned.length === 0, 'W6 no spawn', spawned.length);
@@ -1089,12 +1106,12 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const cfg = JSON.parse(readFileSync(s.file, 'utf8'));
 	check(cfg.enabled === false && cfg.bell.gapMs === GAP, 'Y5 persisted (other fields kept)', cfg);
 	// 同一实例：后续 complete 不通知（无需重启）
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0 && s.logLines().length === 0, 'Y5 runtime disabled immediately', s.writes);
 	// 重新启用后恢复
 	await s.call('setEnabled', { enabled: true });
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { createdAtMs: Date.now() - 30_000 })) });
+	completeTurn(s, 1, { startAgoMs: 30_000 });
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'Y5 re-enabled works', s.bells());
 	rmSync(s.dir, { recursive: true, force: true });
@@ -1434,12 +1451,300 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 		warn: (m) => s.warns.push(m)
 	});
 	// 30s 的 complete：cordis 显式 minDuration=100000s → 不响（仅日志）
-	s.emit('goal/changed', { change: goalChange('complete', goalView('complete')) });
+	completeTurn(s, 1);
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0, 'S6 cordis minDuration honored', s.bells());
 	check(s.logLines().length === 1, 'S6 log still emitted', s.logLines());
 	rmSync(s.dir, { recursive: true, force: true });
 	report('S6: apply 第二参数（cordis 显式配置）生效 ✓');
+}
+
+// ---------- T: v0.11 final-answer completion（turn/end 语义） ----------
+// T1: turn/start → user/message → turn/end(completed) → complete 通知（日志 + done 1 BEL）
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1);
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T1 one BEL', s.bells());
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): 为 deepseek harness 制作通知插件 (turn #1)', 'T1 log', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T1: turn/end completed → complete ✓');
+}
+
+// T2-T6: 非 completed 的 turn/end 一律不通知
+{
+	for (const [reason, label] of [['interrupted', 'T2'], ['aborted', 'T3'], ['error', 'T4'], ['blocked', 'T5'], ['max-tokens', 'T6']]) {
+		const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+		s.applyPlugin();
+		const t0 = Date.now() - 30_000;
+		s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+		s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '任务', t0 + 5));
+		s.emit('session/event', MAIN_SESSION, turnEnd(1, reason, Date.now()));
+		await sleep(GAP * 2 + 20);
+		check(s.bells().length === 0 && s.logLines().length === 0, label + ' ' + reason + ' silent', s.writes);
+		rmSync(s.dir, { recursive: true, force: true });
+		report(label + ': turn/end(' + reason + ') 不通知 ✓');
+	}
+}
+
+// T7: duration < minDuration → 日志，无声音
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { startAgoMs: 2_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 0, 'T7 no BEL', s.bells());
+	check(s.logLines().length === 1 && s.logLines()[0].includes('✓ completed (2s)'), 'T7 log kept', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T7: 短请求（<minDuration）只日志 ✓');
+}
+
+// T8: duration >= minDuration → done
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { startAgoMs: 60_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T8 one BEL', s.bells());
+	check(s.logLines()[0].includes('✓ completed (60s)'), 'T8 duration logged', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T8: 长请求（>=minDuration）播放 done ✓');
+}
+
+// T9: 重复 turn/end → 只通知一次
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1);
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now() + 100));
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now() + 200));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T9 one BEL', s.bells());
+	check(s.logLines().length === 1, 'T9 one log', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T9: 重复 turn/end 只通知一次 ✓');
+}
+
+// T10: 同 turn 内部事件（step/chunk/tool）不影响完成通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, { type: 'step/start', time: t0 + 100, data: { turn: 1, step: 1 } });
+	s.emit('session/event', MAIN_SESSION, { type: 'assistant/chunk', time: t0 + 200, data: { turn: 1, step: 1, chunk: { type: 'text', text: 'x' } } });
+	s.emit('session/event', MAIN_SESSION, { type: 'tool/call', time: t0 + 300, data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' } });
+	s.emit('session/event', MAIN_SESSION, { type: 'step/end', time: t0 + 400, data: { turn: 1, step: 1 } });
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T10 one BEL', s.bells());
+	check(s.logLines().length === 1, 'T10 one log', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T10: turn 内部事件不重复通知 ✓');
+}
+
+// T11: approval 在 turn 内 → permission 立即 + 最终 complete
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, approvalEvent({ id: 'req-1' }));
+	await sleep(GAP * 3 + 30);
+	check(s.bells().length === 2, 'T11 permission first (2 BEL)', s.bells());
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 3 + 30);
+	check(s.bells().length === 3, 'T11 permission + done', s.bells());
+	const l = s.logLines();
+	check(l.length === 2 && l[0].includes('🔐 approval') && l[1].includes('✓ completed'), 'T11 both logs', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T11: approval + complete 联动 ✓');
+}
+
+// T12: question 在 turn 内 → question 立即 + 最终 complete
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, {
+		type: 'tool/call',
+		time: t0 + 100,
+		data: { turn: 1, step: 1, callId: 'call-q', name: 'ask_user_question', arguments: JSON.stringify({ questions: [{ id: 'q', question: '要继续吗？', options: ['是', '否'] }] }) }
+	});
+	await sleep(GAP * 3 + 30);
+	check(s.bells().length === 2, 'T12 question first (2 BEL)', s.bells());
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 3 + 30);
+	check(s.bells().length === 3, 'T12 question + done', s.bells());
+	const l = s.logLines();
+	check(l.length === 2 && l[0].includes('❓ question') && l[1].includes('✓ completed'), 'T12 both logs', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T12: question + complete 联动 ✓');
+}
+
+// T13: 子会话（delegationDepth=1）turn/end completed → 无任何输出
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', SUB_SESSION, turnStart(1, t0));
+	s.emit('session/event', SUB_SESSION, turnUserMsg(1, '子代理任务', t0 + 5));
+	s.emit('session/event', SUB_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'T13 subagent silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T13: 子代理 turn 不触发 complete ✓');
+}
+
+// T14: 主会话（delegationDepth=0）正常 complete
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1);
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1 && s.bells().length === 1, 'T14 main session works', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T14: 主会话 delegationDepth=0 ✓');
+}
+
+// T15: 连续两个 turn → 各自独立计时、各自一次
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { startAgoMs: 30_000, text: '第一个请求' });
+	completeTurn(s, 2, { startAgoMs: 5_000, text: '第二个请求' });
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T15 first long -> BEL, second short -> no BEL', s.bells());
+	const l = s.logLines();
+	check(l.length === 2 && l[0].includes('第一个请求') && l[1].includes('第二个请求'), 'T15 two independent turns', l);
+	// 第三个独立 turn（长）→ 第二个 BEL（turn 2 短请求已被去重记录）
+	completeTurn(s, 3, { startAgoMs: 30_000, text: '第三个请求' });
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 2, 'T15 third turn long -> BEL', s.bells());
+	check(s.logLines().length === 3, 'T15 three logs', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T15: 多 turn 独立计时/去重 ✓');
+}
+
+// T16: 缺 turn/start → 只日志（unknown duration），不播放
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	s.emit('session/event', MAIN_SESSION, turnEnd(58, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 0, 'T16 no BEL without start', s.bells());
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed: turn #58', 'T16 unknown duration log', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T16: 缺 turn/start 只日志不播放 ✓');
+}
+
+// T17: 首条 user/message 作为摘要
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { text: '请修复进度条卡顿' });
+	await sleep(GAP * 2 + 20);
+	check(s.logLines()[0].includes('请修复进度条卡顿'), 'T17 summary used', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T17: user message 摘要 ✓');
+}
+
+// T18: 无 user/message → fallback "turn #N"
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(3, t0));
+	s.emit('session/event', MAIN_SESSION, turnEnd(3, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): turn #3', 'T18 fallback turn #N', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T18: 无 user message fallback ✓');
+}
+
+// T19: user message 超过 maxLength → 截断
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { text: '字'.repeat(150) });
+	await sleep(GAP * 2 + 20);
+	const summary = s.logLines()[0]?.split(': ')[1]?.split(' (turn #')[0];
+	check(summary?.length === 121 && summary.endsWith('…'), 'T19 truncated', summary?.length);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T19: user message 截断 ✓');
+}
+
+// T20: 多行 user message → 单行
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { text: '第一行\n第二行   \n\n第三行' });
+	await sleep(GAP * 2 + 20);
+	check(s.logLines()[0].includes('第一行 第二行 第三行'), 'T20 single line', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T20: 多行转单行 ✓');
+}
+
+// T21: goal/changed complete → 不再播放 done、无日志
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	s.emit('goal/changed', { change: goalChange('complete', goalView('complete', { createdAtMs: Date.now() - 60_000 })) });
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'T21 goal complete silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T21: goal complete 不再触发 done ✓');
+}
+
+// T22: goal/changed block → 仍然播放 block
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	s.emit('goal/changed', { change: goalChange('block', goalView('blocked')) });
+	await sleep(GAP * 3 + 30);
+	check(s.bells().length === 2, 'T22 block 2 BEL', s.bells());
+	check(s.logLines()[0].includes('⚠ blocked'), 'T22 block log', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T22: goal block 语义保留 ✓');
+}
+
+// T23: WAV backend → complete 播放 done.wav
+{
+	const spawned = [];
+	const s = setup({ soundPack: 'wav', wav: { directory: '/tmp/sounds' }, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	apply(s.ctx, {}, {
+		configPath: s.file,
+		write: (c) => s.writes.push({ t: Date.now(), c: String(c) }),
+		isTTY: () => tty,
+		warn: (m) => s.warns.push(m),
+		spawn: (cmd, args) => { spawned.push({ cmd, args }); return { on: () => {} }; },
+		existsSync: () => true,
+		player: { cmd: 'powershell.exe' }
+	});
+	completeTurn(s, 1);
+	await sleep(GAP * 2 + 20);
+	check(spawned.length === 1 && spawned[0].args.join(' ').includes('done.wav'), 'T23 done.wav played', spawned.map((x) => x.args.join(' ')));
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T23: WAV complete → done.wav ✓');
+}
+
+// T24: BEL backend → complete 用 done → 1 BEL
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { startAgoMs: 60_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T24 done -> 1 BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T24: BEL complete → 1 声 ✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');

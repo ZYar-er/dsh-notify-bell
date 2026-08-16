@@ -9,6 +9,7 @@
     ".": "./src/index.js",
     "./config.js": "./src/config.js",
     "./events.js": "./src/events.js",
+    "./turns.js": "./src/turns.js",
     "./bell.js": "./src/bell.js",
     "./wav.js": "./src/wav.js",
     "./audio.js": "./src/audio.js",

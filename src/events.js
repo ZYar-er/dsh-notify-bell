@@ -1,19 +1,21 @@
 /**
- * dsh-notify-bell — 事件分类模块（v5：approval 通知）。
+ * dsh-notify-bell — 事件分类模块（v0.11：final-answer completion）。
  *
  * 把原始 Cordis/DSH 事件载荷归一化为「通知语义」，不在这里做任何输出，
  * 也完全不关心 BEL 响几次/什么节奏（那是 bell backend 的内部细节）：
- *   - goal/changed（complete / block）→ 通知事件，携带事件类型 +
- *     默认语义 sound（complete → done，block → block）
+ *   - goal/changed（block）→ 通知事件（block → block sound）；
+ *     goal/changed complete 已不产生任何通知（完成语义由 turn/end 承担，
+ *     见 turns.js，避免与最终回答完成双响）
  *   - session/event 的 approval/asked → 通知事件（approval → permission）；
  *     approval/decided 不通知
+ *   - session/event 的 tool/call + ask_user_question → 提问通知
  *   - agent/error → 通知事件（error → error）
  *   - 其余操作（create/edit/pause/resume/clear 等）→ null（不通知）
  *
  * 配置可能覆盖 sound（见 config.js 的 events.*.sound）；这里的 sound
  * 是事件自身的语义默认值。
  */
-export const NOTIFY_OPERATIONS = ['complete', 'block'];
+export const NOTIFY_OPERATIONS = ['block'];
 
 /** 事件类型 → 默认语义 sound（与 config.js 的 DEFAULT_EVENT_SOUNDS 一致）。 */
 export const EVENT_SOUNDS = Object.freeze({
