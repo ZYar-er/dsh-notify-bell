@@ -92,6 +92,14 @@ export function apply(ctx, config = {}, options = {}) {
 		maxLength: config.objective.maxLength,
 		write: options.write
 	});
+	/**
+	 * 去重状态：
+	 * - complete：Map<sessionId, lastNotifiedTurn> —— turn 号单调递增，
+	 *   每 session 至多一条，有界（长跑不增长）。
+	 * - approval/question/error：notified Set（id 全局唯一，仅防重放，
+	 *   频率低，占用可忽略）。
+	 */
+	const notifiedComplete = new Map();
 	const notified = new Set();
 
 	/** 运行时开关：先持久化（失败抛错、状态不变），成功后才更新运行时状态。 */
@@ -105,6 +113,12 @@ export function apply(ctx, config = {}, options = {}) {
 		if (!enabled) return false;
 		const evt = config.events[classified.kind];
 		if (!evt?.enabled) return false;
+		if (classified.kind === 'complete') {
+			const last = notifiedComplete.get(classified.sessionId);
+			if (typeof last === 'number' && classified.turn <= last) return false;
+			notifiedComplete.set(classified.sessionId, classified.turn);
+			return true;
+		}
 		if (notified.has(classified.dedupeKey)) return false;
 		notified.add(classified.dedupeKey);
 		return true;

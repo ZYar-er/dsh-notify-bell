@@ -222,14 +222,21 @@ The icon follows the current light/dark theme.
 
 ### Complete
 
-Triggered when a DSH goal reaches:
+Triggered when the agent finishes its final answer to a user request — the
+durable session event that the DSH Web UI itself uses to close a turn:
 
 ```text
-goal/changed
-operation = complete
+session/event
+type = turn/end
+data.reason.kind = completed
 ```
 
-Short tasks below `minDuration` are logged but do not play a sound.
+Only main sessions notify (subagent turns with `delegationDepth >= 1` are
+ignored). `goal/changed` with `operation = complete` no longer plays a sound.
+
+The duration is `turn/end.time - turn/start.time`; requests shorter than
+`minDuration` are logged but do not play a sound, and a completion without a
+recorded `turn/start` (plugin loaded mid-turn) is logged without a sound.
 
 ### Approval
 

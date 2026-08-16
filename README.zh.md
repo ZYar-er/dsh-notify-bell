@@ -222,14 +222,21 @@ bell-slash
 
 ### 完成
 
-监听：
+当 Agent 完成对用户请求的最终回答时触发 —— 即 DSH Web UI 自身用来
+关闭一轮回复的持久化会话事件：
 
 ```text
-goal/changed
-operation = complete
+session/event
+type = turn/end
+data.reason.kind = completed
 ```
 
-短于 `minDuration` 的任务只输出日志，不播放声音。
+只通知主会话（`delegationDepth >= 1` 的子代理回合会被忽略）。
+`goal/changed` 的 `operation = complete` 不再播放声音。
+
+时长定义为 `turn/end.time - turn/start.time`；短于 `minDuration` 的请求
+只输出日志，不播放声音；缺少对应 `turn/start`（插件在回合中途加载）时
+也只输出日志，不播放声音。
 
 ### 审批
 

@@ -1747,6 +1747,98 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	report('T24: BEL complete → 1 声 ✓');
 }
 
+// T25: 真实主会话 header 无 delegationDepth（C1 回归）→ 正常 complete
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	// 活主会话形态：header 没有 delegationDepth 字段
+	const liveMain = { id: 'session-live', header: { id: 'session-live' } };
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', liveMain, turnStart(1, t0));
+	s.emit('session/event', liveMain, turnUserMsg(1, '真实主会话', t0 + 5));
+	s.emit('session/event', liveMain, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T25 live main session -> BEL', s.bells());
+	check(s.logLines().length === 1 && s.logLines()[0].includes('真实主会话'), 'T25 log', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T25: 无 delegationDepth 主会话正常通知 ✓');
+}
+
+// T26: interrupted 后同 turn 重放 completed → 不误报"完成"（M1 回归：状态已消费）
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'interrupted', t0 + 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 0, 'T26 no BEL after interrupted+replay', s.bells());
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed: turn #1', 'T26 stale entry consumed, no false complete', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T26: interrupted 后重放 completed 不误报 ✓');
+}
+
+// T27: 双 session 交错（主 + 子）→ 各自独立、子代理被排除
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { text: '主会话请求' });
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', SUB_SESSION, turnStart(1, t0));
+	s.emit('session/event', SUB_SESSION, turnUserMsg(1, '子代理任务', t0 + 5));
+	s.emit('session/event', SUB_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'T27 only main BEL', s.bells());
+	check(s.logLines().length === 1 && s.logLines()[0].includes('主会话请求'), 'T27 only main log', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T27: 双 session 交错隔离 ✓');
+}
+
+// T28: user/message 先于 turn/start → 丢弃（无摘要，fallback）
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '过早的消息', t0 - 5_000));
+	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): turn #1', 'T28 early user message dropped', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T28: 先于 turn/start 的 user/message 丢弃 ✓');
+}
+
+// T29: turn/start 缺 event.time → duration null → 只日志不响
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	s.emit('session/event', MAIN_SESSION, { type: 'turn/start', data: { turn: 7 } });
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(7, '无时间', Date.now()));
+	s.emit('session/event', MAIN_SESSION, turnEnd(7, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 0, 'T29 no BEL without start time', s.bells());
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed: 无时间 (turn #7)', 'T29 unknown duration log', l);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T29: turn/start 缺 event.time 只日志 ✓');
+}
+
+// T30: 短 turn 后重复 turn/end → 仍只日志一次、不响
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { startAgoMs: 2_000 });
+	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now() + 100));
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 0, 'T30 no BEL (short + dedupe)', s.bells());
+	check(s.logLines().length === 1, 'T30 one log only', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T30: 短 turn 重复 turn/end 只一次日志 ✓');
+}
+
 if (!failed) report('ALL TESTS PASSED');
 else process.exitCode = 1;
 
