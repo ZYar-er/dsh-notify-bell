@@ -152,6 +152,28 @@ README.md 是 GitHub 首页的主要入口。
 
 ---
 
+### dsh-notify-bell-cover/
+
+README 封面（深色科技风横幅，兼作 GitHub 分享卡片 og:image）。
+
+* readme-cover.svg / readme-cover.zh.svg：中英文封面源文件（纯静态 SVG）
+* readme-cover.png / readme-cover.zh.png：由 SVG 导出的 2x 位图（2560×1280），
+  分别是 README.md / README.zh.md 首图（PNG 兼容 og:image）
+* brand-spec.md：品牌视觉规范（tokens、字体栈、视觉规则）
+* cover-snippet.md：使用说明
+
+规则：
+
+* README.md 顶部首图用 `dsh-notify-bell-cover/readme-cover.png`；
+  README.zh.md 用 `dsh-notify-bell-cover/readme-cover.zh.png`
+* 品牌名/标语/功能描述变化时，同步更新两个 SVG，并按 2x（2560×1280）
+  重新导出两个 PNG（如
+  `rsvg-convert -w 2560 -h 1280 readme-cover.svg -o readme-cover.png`）
+* 分享卡片固定图：需在仓库 Settings → General → Social preview 手动上传
+  readme-cover.png（GitHub UI 操作，agent 无法代做，只提醒）
+
+---
+
 # 三、版本管理
 
 始终识别三个版本概念：

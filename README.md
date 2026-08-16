@@ -4,6 +4,10 @@
 
 [![npm](https://img.shields.io/npm/v/dsh-notify-bell)](https://www.npmjs.com/package/dsh-notify-bell) [![GitHub Release](https://img.shields.io/github/v/release/ZYar-er/dsh-notify-bell)](https://github.com/ZYar-er/dsh-notify-bell/releases/latest)
 
+<p align="center">
+  <img src="dsh-notify-bell-cover/readme-cover.png" alt="dsh-notify-bell — semantic sounds for DSH" width="100%" />
+</p>
+
 A **community plugin** for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) that provides semantic notification sounds for important agent events.
 
 > **Developer Preview · v0.12.0**

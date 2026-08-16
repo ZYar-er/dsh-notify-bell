@@ -1,0 +1,115 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="640" viewBox="0 0 1280 640" role="img" aria-labelledby="cover-title cover-desc" font-family="'Segoe UI',system-ui,-apple-system,'Helvetica Neue',Arial,'PingFang SC','Microsoft YaHei',sans-serif">
+  <title id="cover-title">dsh-notify-bell — Semantic sounds for the agent moments that need you.</title>
+  <desc id="cover-desc">dsh-notify-bell: semantic notification sounds for DeepSeek Harness. Five semantic events (Complete, Approval, Question, Block, Error), five distinct sounds, and a web bell popover for live playback selection. 深色科技风 README 封面。</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#0b0f18"/><stop offset="1" stop-color="#121827"/></linearGradient>
+    <linearGradient id="panel" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#1b2130"/><stop offset="1" stop-color="#161b28"/></linearGradient>
+    <linearGradient id="bell" x1="0" y1="0" x2="0" y2="1"><stop stop-color="#ffffff"/><stop offset="1" stop-color="#bfc9df"/></linearGradient>
+    <radialGradient id="halo"><stop stop-color="#5573ff" stop-opacity=".22"/><stop offset=".55" stop-color="#5573ff" stop-opacity=".06"/><stop offset="1" stop-color="#5573ff" stop-opacity="0"/></radialGradient>
+    <pattern id="grid" width="28" height="28" patternUnits="userSpaceOnUse"><path d="M28 0H0V28" fill="none" stroke="#fff" stroke-opacity=".025"/></pattern>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="170%"><feDropShadow dx="0" dy="16" stdDeviation="20" flood-color="#000" flood-opacity=".48"/></filter>
+    <clipPath id="clip"><rect x="24" y="24" width="1232" height="592" rx="22"/></clipPath>
+    <style>
+      .mono{font-family:ui-monospace,"Cascadia Code","SF Mono",Menlo,Consolas,monospace}
+      .cap{font-size:11px;font-weight:700;letter-spacing:1.1px}
+      .muted{fill:#8993a9}.text{fill:#e8ebf2}.sub{fill:#a7afc1}
+    </style>
+  </defs>
+
+  <!-- background -->
+  <rect width="1280" height="640" fill="#070a11"/>
+  <rect x="24" y="24" width="1232" height="592" rx="22" fill="url(#bg)" stroke="#30394d"/>
+  <g clip-path="url(#clip)">
+    <rect x="24" y="24" width="1232" height="592" fill="url(#grid)"/>
+    <ellipse cx="275" cy="195" rx="250" ry="220" fill="url(#halo)"/>
+  </g>
+
+  <!-- brand mark -->
+  <g transform="translate(133 67)">
+    <circle cx="142" cy="128" r="118" fill="#101625" stroke="#2d3850"/>
+    <g transform="translate(46 32) scale(.75)">
+      <path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.81a40 40 0 0 0 78.38 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216ZM48 184c7.7-13.24 16-43.92 16-80a64 64 0 1 1 128 0c0 36.05 8.28 66.73 16 80Z" fill="url(#bell)" fill-rule="evenodd"/>
+    </g>
+  </g>
+
+  <text x="64" y="68" class="cap muted">DSH COMMUNITY PLUGIN</text>
+  <text x="64" y="356" font-size="42" font-weight="650" letter-spacing="-0.8" class="mono text">dsh-notify-bell</text>
+  <text x="64" y="394" font-size="18" class="sub">Semantic sounds for the agent moments that need you.</text>
+  <text x="64" y="424" font-size="14" class="muted">不错过真正需要你介入的时刻</text>
+
+  <!-- compact feature rail -->
+  <g transform="translate(64 464)">
+    <rect width="136" height="34" rx="17" fill="#151b28" stroke="#30394d"/>
+    <circle cx="17" cy="17" r="4" fill="#6fd39a"/><text x="29" y="21" font-size="11" letter-spacing="0.2" class="sub">5 semantic events</text>
+    <rect x="146" width="130" height="34" rx="17" fill="#151b28" stroke="#30394d"/>
+    <circle cx="163" cy="17" r="4" fill="#7cc7ff"/><text x="175" y="21" font-size="11" letter-spacing="0.2" class="sub">5 distinct sounds</text>
+    <rect x="286" width="114" height="34" rx="17" fill="#151b28" stroke="#30394d"/>
+    <circle cx="303" cy="17" r="4" fill="#5573ff"/><text x="315" y="21" font-size="11" letter-spacing="0.2" class="sub">live switching</text>
+  </g>
+  <text x="64" y="534" font-size="11" class="mono muted">SSE · Web Audio · WAV · Cordis</text>
+  <text x="64" y="564" font-size="11" class="mono muted">github.com/ZYar-er/dsh-notify-bell</text>
+  <text x="291" y="564" font-size="11" class="muted">· MIT License</text>
+
+  <!-- right product preview -->
+  <g filter="url(#shadow)">
+    <rect x="520" y="62" width="696" height="500" rx="18" fill="#101521" stroke="#3a455d"/>
+  </g>
+  <!-- browser chrome -->
+  <rect x="520" y="62" width="696" height="42" rx="18" fill="#171d2a"/>
+  <path d="M520 86V104H1216V86" fill="#171d2a"/>
+  <circle cx="542" cy="83" r="4" fill="#566177"/><circle cx="556" cy="83" r="4" fill="#566177"/><circle cx="570" cy="83" r="4" fill="#566177"/>
+  <rect x="600" y="73" width="310" height="20" rx="10" fill="#101521"/>
+  <text x="615" y="87" font-size="10.5" class="mono muted">deepseek-harness / session</text>
+
+  <!-- app toolbar -->
+  <rect x="544" y="120" width="648" height="48" rx="12" fill="#171d2a" stroke="#2d3649"/>
+  <text x="564" y="150" font-size="14" font-weight="600" class="text">DeepSeek Harness</text>
+  <rect x="1002" y="128" width="94" height="32" rx="16" fill="none" stroke="#30394d"/>
+  <text x="1049" y="148" font-size="12" class="text" text-anchor="middle">Session log</text>
+  <rect x="1108" y="128" width="32" height="32" rx="16" fill="none" stroke="#30394d"/>
+  <g transform="translate(1119 138) scale(.045)"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.81a40 40 0 0 0 78.38 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216ZM48 184c7.7-13.24 16-43.92 16-80a64 64 0 1 1 128 0c0 36.05 8.28 66.73 16 80Z" fill="#eef1f7" fill-rule="evenodd"/></g>
+
+  <!-- underlying semantic event list -->
+  <text x="544" y="202" class="cap muted">AGENT EVENTS</text>
+  <g>
+    <rect x="544" y="216" width="314" height="52" rx="26" fill="#252c44" stroke="#323a4e"/>
+    <g transform="translate(564 233) scale(.0703)"><path d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z" fill="#5573ff"/></g>
+    <text x="592" y="247" font-size="15" font-weight="600" class="text">✓</text><text x="616" y="247" font-size="15" font-weight="600" class="text">Complete</text>
+  </g>
+  <g>
+    <rect x="544" y="280" width="314" height="52" rx="26" fill="#252c44" stroke="#323a4e"/>
+    <g transform="translate(564 297) scale(.0703)"><path d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-68-56a12,12,0,1,1-12-12A12,12,0,0,1,140,152Z" fill="#5573ff"/></g>
+    <text x="592" y="311" font-size="15" font-weight="600" class="text">🔐</text><text x="616" y="311" font-size="15" font-weight="600" class="text">Approval</text>
+  </g>
+  <g>
+    <rect x="544" y="344" width="314" height="52" rx="26" fill="#252c44" stroke="#323a4e"/>
+    <g transform="translate(564 361) scale(.0703)"><path d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z" fill="#5573ff"/></g>
+    <text x="592" y="375" font-size="15" font-weight="600" class="text">❓</text><text x="616" y="375" font-size="15" font-weight="600" class="text">Question</text>
+  </g>
+  <g>
+    <rect x="544" y="408" width="314" height="52" rx="26" fill="#252c44" stroke="#323a4e"/>
+    <g transform="translate(564 425) scale(.0703)"><path d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z" fill="#5573ff"/></g>
+    <text x="592" y="439" font-size="15" font-weight="600" class="text">⚠</text><text x="616" y="439" font-size="15" font-weight="600" class="text">Block</text>
+  </g>
+  <g>
+    <rect x="544" y="472" width="314" height="52" rx="26" fill="#252c44" stroke="#323a4e"/>
+    <g transform="translate(564 489) scale(.0703)"><path d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z" fill="#5573ff"/></g>
+    <text x="592" y="503" font-size="15" font-weight="600" class="text">✗</text><text x="616" y="503" font-size="15" font-weight="600" class="text">Error</text>
+  </g>
+
+  <!-- bell popover（还原 client.js：标题 → 铃铛行+开关 → 播放方式 → radio 组） -->
+  <g filter="url(#shadow)">
+    <rect x="892" y="184" width="286" height="252" rx="16" fill="#20283a" stroke="#46526b"/>
+  </g>
+  <!-- popover pointer -->
+  <path d="M1112 184l12-12 12 12" fill="#20283a" stroke="#46526b" stroke-width="1"/>
+  <text x="913" y="216" font-size="16" class="muted">Notifications</text>
+  <g transform="translate(908 240) scale(.082)"><path d="M221.8 175.94c-5.55-9.56-13.8-36.61-13.8-71.94a80 80 0 1 0-160 0c0 35.34-8.26 62.38-13.81 71.94A16 16 0 0 0 48 200h40.81a40 40 0 0 0 78.38 0H208a16 16 0 0 0 13.8-24.06ZM128 216a24 24 0 0 1-22.62-16h45.24A24 24 0 0 1 128 216ZM48 184c7.7-13.24 16-43.92 16-80a64 64 0 1 1 128 0c0 36.05 8.28 66.73 16 80Z" fill="#a7afc1" fill-rule="evenodd"/></g>
+  <text x="939" y="255" font-size="17" class="text">Notifications</text>
+  <rect x="1102" y="232" width="60" height="34" rx="16" fill="none" stroke="#30394d"/>
+  <text x="1132" y="254" font-size="16" class="text" text-anchor="middle">On</text>
+  <text x="913" y="299" font-size="16" class="muted">Playback</text>
+  <g><circle cx="920" cy="329" r="8.5" fill="#20283a" stroke="#5573ff" stroke-width="1.8"/><circle cx="920" cy="329" r="3.5" fill="#5573ff"/><text x="939" y="335" font-size="17" class="text">Browser</text></g>
+  <g><circle cx="920" cy="368" r="8.5" fill="#20283a" stroke="#667187" stroke-width="1.5"/><text x="939" y="374" font-size="17" class="text">Backend</text></g>
+  <g><circle cx="920" cy="407" r="8.5" fill="#20283a" stroke="#667187" stroke-width="1.5"/><text x="939" y="413" font-size="17" class="text">None</text></g>
+</svg>
