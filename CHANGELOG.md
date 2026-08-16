@@ -2,13 +2,13 @@
 
 dsh-notify-bell 版本级、面向用户的变化记录。历史条目与对应的 GitHub Release 文案保持一致，不会被后续版本覆盖。
 
-## [Unreleased]
-
-当前 main 分支（源码版本 0.11.1，尚未发布）。
+## [0.11.2] - 2026-08-16
 
 ### Added
 
 - `/notify-bell` HTTP API 的成功响应新增 `version` 字段（来自 package.json，`PLUGIN_VERSION`），可在运行时确认安装的插件版本。
+
+## [0.11.1] - 2026-08-16
 
 ### Fixed
 
