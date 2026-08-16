@@ -2,6 +2,12 @@
 
 dsh-notify-bell 版本级、面向用户的变化记录。历史条目与对应的 GitHub Release 文案保持一致，不会被后续版本覆盖。
 
+## [Unreleased]
+
+### Added
+
+- `playback: "browser"` 实验：后端分类后经 SSE（`/notify-bell/events`）推送 semantic sound，DSH Web 浏览器用 Web Audio 播放对应 WAV（`/notify-bell/sounds/*.wav` 直接服务 sound-showcase 素材）。事件分类始终在后端；browser 模式下本机后端不播放。含用户手势 unlock（AudioContext resume）与 locked 诊断状态。
+
 ## [0.11.2] - 2026-08-16
 
 ### Added

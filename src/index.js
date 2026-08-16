@@ -9,12 +9,19 @@
  *   - 通过 ctx 注册的监听/inject 在插件卸载时自动清理。
  *
  * 结构（便于以后扩展 wav/webhook 等后端）：
- *   - config.js  配置 schema/合并（sound 解析/校验、旧 bellCount 兼容、soundPack）
+ *   - config.js  配置 schema/合并（sound 解析/校验、旧 bellCount 兼容、soundPack、playback）
  *   - events.js  事件分类（block/approval/question/error，不含响铃细节）
  *   - turns.js   turn 跟踪（turn/start 时间、首条 user message、complete 语义）
+ *   - sse.js     SSE hub（playback=browser 时把 semantic sound 推给浏览器）
  *   - bell.js    BEL 后端（play(sound)，内部维护 sound → count/gap 映射）
  *   - wav.js     WAV 后端（Windows/WSL/Linux，失败 fallback BEL）
  *   - log.js     日志后端（stdout 输出 + maxLength 截断）
+ *
+ * 播放位置（playback，实验阶段）：
+ *   - "backend"（默认）：通知由本机后端播放（soundPack 决定 BEL/WAV）。
+ *   - "browser"：后端仍负责分类/去重/日志，但不做任何本地播放；
+ *     只通过 SSE（/notify-bell/events）推送 { sound }，由 DSH Web
+ *     客户端的浏览器实际播放（client.js 内联播放器）。
  *
  * 事件语义（受配置 events.* 控制）：
  *   - complete：turn/end（reason.kind === "completed"，主会话
@@ -43,7 +50,8 @@
  *     session/disposed 回收。
  *   - user message / 错误消息按 objective.maxLength（默认 120）截断。
  *   - BEL 只在 process.stdout.isTTY 时写入；日志行始终输出。
- *   - soundPack 目前支持 "default"（BEL）与 "wav"（本地音频）。
+ *   - soundPack 目前支持 "default"（BEL）与 "wav"（本地音频）；
+ *     playback 目前支持 "backend"（本机播放）与 "browser"（SSE → 浏览器播放）。
  *
  * @param ctx - Cordis 上下文。
  * @param config - Cordis 配置（schema 校验 + 默认填充）。
@@ -56,7 +64,10 @@ import { createBellBackend } from './bell.js';
 import { createWavBackend } from './wav.js';
 import { createLogBackend } from './log.js';
 import { createTurnTracker } from './turns.js';
+import { createSseHub } from './sse.js';
 import { classifyGoalChange, classifyApproval, classifyQuestion, classifyAgentError } from './events.js';
+import { readFile } from 'node:fs/promises';
+import { fileURLToPath } from 'node:url';
 import pkg from '../package.json' with { type: 'json' };
 
 export { Config } from './config.js';
@@ -99,6 +110,21 @@ export function apply(ctx, config = {}, options = {}) {
 		})
 		: createBellBackend(backendOptions);
 	if (typeof ctx.effect === 'function') ctx.effect(() => () => backend.dispose(), 'notify-bell audio backend');
+
+	// playback=browser 实验：SSE hub 把 semantic sound 推给 DSH Web 客户端，
+	// 浏览器负责实际播放；后端不做任何本地播放（BEL/WAV 都不触发）。
+	const sse = createSseHub({ heartbeatMs: options.heartbeatMs ?? 15_000 });
+	if (typeof ctx.effect === 'function') ctx.effect(() => () => sse.dispose(), 'notify-bell sse hub');
+
+	/**
+	 * 通知输出分流：playback=browser → SSE 推送 { sound }；
+	 * 否则 → 本地 backend（BEL/WAV）播放。
+	 * 事件分类/去重/enabled 门控都在调用前完成（admit），这里只负责"响"。
+	 */
+	const notify = (sound) => {
+		if (config.playback === 'browser') sse.broadcast({ sound });
+		else backend.play(sound);
+	};
 	const log = createLogBackend({
 		maxLength: config.objective.maxLength,
 		write: options.write
@@ -158,6 +184,8 @@ export function apply(ctx, config = {}, options = {}) {
 	// GET  /notify-bell                 → { ok, value: { enabled }, version }
 	// POST /notify-bell/setEnabled      → body { enabled } → 持久化 + 运行时生效
 	// POST /notify-bell/toggle          → 翻转 enabled
+	// GET  /notify-bell/events          → SSE（playback=browser 的推送通道）
+	// GET  /notify-bell/sounds/<name>.wav → 静态声音素材（sound-showcase/sounds）
 	// 任何失败（含配置写失败）返回 { ok: false, error }，客户端据此回滚。
 	// 所有成功响应均带 version（PLUGIN_VERSION），标识运行中的插件版本。
 	ctx.inject(['webServer'], (webCtx) => {
@@ -171,6 +199,26 @@ export function apply(ctx, config = {}, options = {}) {
 			res.writeHead(status, { 'content-type': 'application/json' });
 			res.end(text);
 		};
+		// 静态 WAV：直接服务 sound-showcase/sounds（npm 包 files 白名单已含），
+		// 不复制素材、不打包进 JS。懒加载 + 内存缓存（文件小，~0.1MB 每个）。
+		const soundsDir = fileURLToPath(new URL('../sound-showcase/sounds/', import.meta.url));
+		const soundCache = new Map();
+		const serveSound = async (name, res) => {
+			const safe = /^[a-z0-9-]+\.wav$/.test(name);
+			if (!safe) return json(res, 404, { ok: false, error: { code: 'not-found', message: `unknown sound ${name}` } });
+			try {
+				let body = soundCache.get(name);
+				if (body === undefined) {
+					body = await readFile(soundsDir + name);
+					soundCache.set(name, body);
+				}
+				res.writeHead(200, { 'content-type': 'audio/wav', 'cache-control': 'public, max-age=3600' });
+				res.end(body);
+			} catch (error) {
+				if (error?.code === 'ENOENT') return json(res, 404, { ok: false, error: { code: 'not-found', message: `unknown sound ${name}` } });
+				throw error;
+			}
+		};
 		webCtx.webServer.register({
 			kind: 'prefix',
 			path: '/notify-bell',
@@ -178,6 +226,22 @@ export function apply(ctx, config = {}, options = {}) {
 				const url = new URL(req.url ?? '/', 'http://notify-bell');
 				const endpoint = url.pathname.replace(/^\/notify-bell\/?/, '') || 'getEnabled';
 				try {
+					if (endpoint === 'events') {
+						if (req.method !== 'GET') return json(res, 405, { ok: false, error: { code: 'method-not-allowed', message: 'use GET' } });
+						// ready 帧快照当前运行时状态；心跳立即开始，避免 idle 断连。
+						sse.attach(req, res, {
+							enabled,
+							playback: config.playback,
+							soundPack: config.soundPack,
+							version: PLUGIN_VERSION
+						});
+						sse.start();
+						return;
+					}
+					if (endpoint.startsWith('sounds/')) {
+						if (req.method !== 'GET') return json(res, 405, { ok: false, error: { code: 'method-not-allowed', message: 'use GET' } });
+						return serveSound(endpoint.slice('sounds/'.length), res);
+					}
 					if (endpoint === 'getEnabled') {
 						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
 					}
@@ -219,7 +283,7 @@ export function apply(ctx, config = {}, options = {}) {
 		const durationText = durationS === null ? '' : ` (${durationS}s)`;
 
 		log.line(`[notify-bell] ⚠ blocked${durationText}: ${objective}`);
-		backend.play(config.events.block.sound);
+		notify(config.events.block.sound);
 	});
 
 	// turn 跟踪：complete 语义（最终 assistant 回答完成）。
@@ -244,13 +308,13 @@ export function apply(ctx, config = {}, options = {}) {
 				const text = log.truncate(classified.questionText ?? '(question)');
 				const optionsText = classified.optionsCount > 0 ? ` (${classified.optionsCount} options)` : '';
 				log.line(`[notify-bell] ❓ question: ${text}${optionsText}`);
-				backend.play(config.events.question.sound);
+				notify(config.events.question.sound);
 				return;
 			}
 			// approval：reason 缺失时只输出 toolName，不输出 undefined/null。
 			const reasonText = classified.reason === null ? '' : `: ${classified.reason}`;
 			log.line(`[notify-bell] 🔐 approval: ${classified.toolName}${reasonText}`);
-			backend.play(config.events.approval.sound);
+			notify(config.events.approval.sound);
 			return;
 		}
 		// 2) turn 流：turn/start 计时、user/message 摘要、
@@ -273,7 +337,7 @@ export function apply(ctx, config = {}, options = {}) {
 			log.line(line);
 			// minDuration 过滤：不足只日志；未知时长（缺 turn/start）不播放。
 			if (complete.durationMs === null) return;
-			if (complete.durationMs >= config.minDuration * 1000) backend.play(config.events.complete.sound);
+			if (complete.durationMs >= config.minDuration * 1000) notify(config.events.complete.sound);
 			return;
 		}
 	});
@@ -286,6 +350,6 @@ export function apply(ctx, config = {}, options = {}) {
 			? ''
 			: ` (turn ${classified.turn}${classified.step === null ? '' : ` step ${classified.step}`})`;
 		log.line(`[notify-bell] ✗ error${where}: ${log.truncate(classified.message)}`);
-		backend.play(config.events.error.sound);
+		notify(config.events.error.sound);
 	});
 }

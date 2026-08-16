@@ -13,6 +13,8 @@
     "./bell.js": "./src/bell.js",
     "./wav.js": "./src/wav.js",
     "./audio.js": "./src/audio.js",
+    "./sse.js": "./src/sse.js",
+    "./browser-audio.js": "./src/browser-audio.js",
     "./log.js": "./src/log.js",
     "./client": "./src/client.js",
     "./package.json": "./package.json"
@@ -25,6 +27,8 @@
     "src/bell.js",
     "src/wav.js",
     "src/audio.js",
+    "src/sse.js",
+    "src/browser-audio.js",
     "src/log.js",
     "src/client.js",
     "cordis.patch.yml",

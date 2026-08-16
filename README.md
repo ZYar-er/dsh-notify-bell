@@ -172,6 +172,7 @@ Example file:
     }
   },
   "soundPack": "wav",
+  "playback": "backend",
   "wav": {
     "directory": "~/.config/dsh/notify-bell/sounds",
     "fallback": "bell"
@@ -182,6 +183,30 @@ Example file:
   }
 }
 ```
+
+### Playback location (experimental)
+
+`playback` chooses where the notification sound is played
+(`soundPack` stays the sound-material source):
+
+- `backend` (default): the host plays the sound (BEL or WAV via
+  `soundPack`), same as before.
+- `browser`: the backend still classifies events and writes logs, but
+  plays nothing locally. It pushes the semantic sound over
+  Server-Sent Events (`GET /notify-bell/events`), and the DSH Web UI
+  plays the matching WAV (`/notify-bell/sounds/*.wav`, served from the
+  package's `sound-showcase/sounds`). The browser plays exactly one
+  sound per notification.
+
+Experimental notes (this stage):
+
+- The browser uses Web Audio; autoplay policy requires one user
+  gesture (`pointerdown`/`keydown`) before the first sound. Until then
+  playback is silently refused and a locked state is recorded in the
+  console (`console.debug`), never thrown.
+- No `both`, no backend fallback, no multi-tab coordination yet.
+- `enabled=false` still silences everything: the backend pushes
+  nothing and the browser plays nothing.
 
 ### Completion threshold
 

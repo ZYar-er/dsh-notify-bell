@@ -6,6 +6,14 @@
 //     ~/.config/dsh/notify-bell.json（保留其他字段）
 //   - 初始状态 GET /notify-bell 读取（不假设 true）；写失败 UI 回滚 + title 错误提示
 //
+// 浏览器播放（playback=browser 实验）：
+//   - EventSource /notify-bell/events：后端分类后推送 { sound }，
+//     浏览器只负责播放（不复制分类逻辑；后端是唯一事件事实源）。
+//   - Web Audio（AudioContext + buffer 缓存）；pointerdown/keydown
+//     用户手势 unlock（resume）；未解锁时静默失败并记录 locked 状态，
+//     不抛异常、不 fallback 到后端。
+//   - 播放器实现与 src/browser-audio.js 同契约（参考实现，node 单测覆盖）。
+//
 // 本文件是打包产物格式的浏览器 bundle：注册到 window.__ModuleLoader__，
 // 工厂函数内通过 require() 解析平台种子模块（react 等），
 // 与官方 dsh-client-* 包发布的 client.js 结构一致。
@@ -127,12 +135,185 @@ window.__ModuleLoader__.load({
 		}
 		//#endregion
 
+		//#region 浏览器播放器（playback=browser 实验）
+		// 与 src/browser-audio.js 同一契约的内联实现（打包 bundle 无法 import
+		// 源模块，两者必须保持行为一致；src/browser-audio.js 是参考实现并被
+		// node 单测覆盖）。后端是唯一事件事实源：SSE 推送什么就播什么，
+		// 这里不复制任何分类逻辑。
+		//
+		// autoplay 策略：AudioContext 在用户手势（pointerdown/keydown）中
+		// 创建/resume 后才会 running；未解锁时播放静默失败并记录状态，
+		// 不抛异常、不影响 DSH 页面、不 fallback 到后端。
+		var SOUND_URLS = {
+			done: "/notify-bell/sounds/done.wav",
+			permission: "/notify-bell/sounds/permission.wav",
+			question: "/notify-bell/sounds/question.wav",
+			block: "/notify-bell/sounds/block.wav",
+			error: "/notify-bell/sounds/error.wav"
+		};
+
+		/** 创建播放器：懒建 AudioContext、buffer 缓存、locked 诊断状态。 */
+		function createPlayer() {
+			var AudioContextCtor = window.AudioContext || window.webkitAudioContext;
+			var player = {
+				ctx: null,
+				buffers: {},
+				unlockDisposer: null,
+				state: { locked: true, ready: false, enabled: true, lastError: "", plays: 0 }
+			};
+			player.ensureCtx = function () {
+				if (player.ctx !== null) return player.ctx;
+				if (!AudioContextCtor) {
+					player.state.lastError = "AudioContext unavailable";
+					return null;
+				}
+				try {
+					player.ctx = new AudioContextCtor();
+				} catch (error) {
+					player.ctx = null;
+					player.state.lastError = "AudioContext creation failed: " + (error && error.message ? error.message : String(error));
+					return null;
+				}
+				return player.ctx;
+			};
+			player.unlock = function () {
+				var audio = player.ensureCtx();
+				if (audio === null) return Promise.resolve(false);
+				return Promise.resolve()
+					.then(function () {
+						if (audio.state === "suspended") return audio.resume();
+					})
+					.then(function () {
+						var ok = audio.state === "running";
+						if (ok) {
+							player.state.locked = false;
+							player.state.lastError = "";
+							player.removeUnlockListeners();
+						}
+						return ok;
+					})
+					.catch(function (error) {
+						player.state.lastError = "resume failed: " + (error && error.message ? error.message : String(error));
+						return false;
+					});
+			};
+			player.loadBuffer = function (audio, url) {
+				var cached = player.buffers[url];
+				if (cached !== undefined) return Promise.resolve(cached);
+				return fetch(url)
+					.then(function (response) {
+						if (!response.ok) throw new Error("fetch " + url + " -> " + response.status);
+						return response.arrayBuffer();
+					})
+					.then(function (arrayBuffer) { return audio.decodeAudioData(arrayBuffer); })
+					.then(function (buffer) {
+						player.buffers[url] = buffer;
+						return buffer;
+					});
+			};
+			player.playSound = function (sound) {
+				var url = SOUND_URLS[sound];
+				if (typeof sound !== "string" || url === undefined) {
+					player.state.lastError = "unknown sound: " + String(sound);
+					return Promise.resolve(false);
+				}
+				var audio = player.ensureCtx();
+				if (audio === null) return Promise.resolve(false);
+				if (audio.state !== "running") {
+					player.state.locked = true;
+					player.state.lastError = "autoplay locked (ctx " + audio.state + "); unlock with a user gesture";
+					return Promise.resolve(false);
+				}
+				return player.loadBuffer(audio, url)
+					.then(function (buffer) {
+						var source = audio.createBufferSource();
+						source.buffer = buffer;
+						source.connect(audio.destination);
+						source.start();
+						player.state.plays += 1;
+						player.state.locked = false;
+						player.state.lastError = "";
+						return true;
+					})
+					.catch(function (error) {
+						player.state.lastError = "play failed: " + (error && error.message ? error.message : String(error));
+						return false;
+					});
+			};
+			player.handleFrame = function (event, data) {
+				if (event === "ready") {
+					player.state.ready = true;
+					if (data && typeof data.enabled === "boolean") player.state.enabled = data.enabled;
+					console.debug("[notify-bell] browser audio ready:", JSON.stringify(data));
+					return;
+				}
+				if (event === "notify") {
+					if (!player.state.enabled) return;
+					player.playSound(data && data.sound);
+					return;
+				}
+				player.state.lastError = "unknown sse event: " + String(event);
+			};
+			player.removeUnlockListeners = function () {
+				if (player.unlockDisposer !== null) {
+					var dispose = player.unlockDisposer;
+					player.unlockDisposer = null;
+					dispose();
+				}
+			};
+			player.attachUnlockListeners = function () {
+				if (player.unlockDisposer !== null) return;
+				if (typeof window === "undefined" || typeof window.addEventListener !== "function") return; // 非浏览器环境（node 测试）跳过
+				var handler = function () { player.unlock(); };
+				window.addEventListener("pointerdown", handler, true);
+				window.addEventListener("keydown", handler, true);
+				player.unlockDisposer = function () {
+					window.removeEventListener("pointerdown", handler, true);
+					window.removeEventListener("keydown", handler, true);
+				};
+			};
+			player.dispose = function () {
+				player.removeUnlockListeners();
+				player.buffers = {};
+				if (player.ctx !== null) {
+					try { player.ctx.close(); } catch (error) { /* 忽略关闭失败 */ }
+					player.ctx = null;
+				}
+			};
+			return player;
+		}
+
+		/** 建立 SSE 连接；EventSource 断线自动重连（浏览器内置）。 */
+		function connectSse(player) {
+			if (typeof EventSource === "undefined") return null; // 非浏览器环境（node 测试）
+			var es = new EventSource("/notify-bell/events");
+			es.addEventListener("ready", function (event) {
+				var data = null;
+				try { data = JSON.parse(event.data); } catch (error) { /* 忽略坏帧 */ }
+				player.handleFrame("ready", data);
+			});
+			es.addEventListener("notify", function (event) {
+				var data = null;
+				try { data = JSON.parse(event.data); } catch (error) {
+					player.state.lastError = "bad sse payload";
+					return;
+				}
+				player.handleFrame("notify", data);
+			});
+			es.onerror = function () {
+				player.state.lastError = "sse connection error (will reconnect)";
+			};
+			return es;
+		}
+		//#endregion
+
 		//#region 插件入口
 		/** 所需服务：插槽注册表（conversation.session.header.utilities）。 */
 		var inject = ["slots"];
 
 		/**
-		 * 浏览器端插件主体：把铃铛注册进对话页顶栏工具区（Session log 按钮旁）。
+		 * 浏览器端插件主体：把铃铛注册进对话页顶栏工具区（Session log 按钮旁），
+		 * 并在 playback=browser 时启动 SSE 播放器（后端推送 → 浏览器播放）。
 		 * @param ctx - 客户端根上下文。
 		 */
 		function apply(ctx) {
@@ -143,6 +324,18 @@ window.__ModuleLoader__.load({
 				document.head.append(style);
 				return function () { style.remove(); };
 			}, "dsh-notify-bell: styles");
+
+			ctx.effect(function () {
+				var player = createPlayer();
+				player.attachUnlockListeners();
+				var es = connectSse(player);
+				// 解锁状态只在 console 记录（可诊断），本阶段不增加新 UI。
+				console.debug("[notify-bell] browser playback started (locked=" + player.state.locked + ")");
+				return function () {
+					if (es !== null) es.close();
+					player.dispose();
+				};
+			}, "dsh-notify-bell: browser audio");
 
 			ctx.effect(function () {
 				return ctx.slots.inject("conversation.session.header.utilities", function () {

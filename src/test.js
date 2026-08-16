@@ -71,6 +71,8 @@ import { writeEnabled } from './config.js';
 import { classifyGoalChange, classifyApproval, classifyQuestion, classifyAgentError } from './events.js';
 import { apply, PLUGIN_VERSION } from './index.js';
 import { createTurnTracker } from './turns.js';
+import { createSseHub } from './sse.js';
+import { createBrowserAudio, SOUND_URLS } from './browser-audio.js';
 
 const report = (line) => process.stdout.write(line + '\n');
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -1229,7 +1231,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 		await route.handler(req, res);
 		return { status, ...JSON.parse(payload) };
 	};
-	return { ...s, call };
+	return { ...s, route, call };
 }
 
 // Y4: getEnabled（GET /notify-bell）
@@ -1353,7 +1355,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 		}
 	};
 	loaded.apply(mockCtx);
-	check(effects.length === 2, 'Y11 two effects', effects.length);
+	check(effects.length === 3, 'Y11 three effects (styles + browser audio + bell entry)', effects.length);
 	check(injectedName === 'conversation.session.header.utilities', 'Y11 slot name', injectedName);
 	check(regOpts?.id === 'notify-bell-toggle' && regOpts?.name === 'conversation.session.header.utilities' && regOpts?.order === 90, 'Y11 register opts', regOpts);
 	check(typeof regComp === 'function', 'Y11 component registered', typeof regComp);
@@ -2349,11 +2351,13 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 // D5: backend 纳入 ctx.effect 生命周期 → 卸载/HMR 时取消未决第二声
 {
 	const s = setup({ events: { block: { sound: 'block' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
-	let disposeBackend = null;
-	s.ctx.effect = (fn) => { disposeBackend = fn(); return () => {}; };
+	const effectDisposers = [];
+	s.ctx.effect = (fn) => { effectDisposers.push(fn()); return () => {}; };
 	s.applyPlugin();
 	s.emit('goal/changed', { change: goalChange('block', goalView('blocked')) });
-	check(typeof disposeBackend === 'function', 'D5 backend disposer registered', disposeBackend);
+	// 真实 ctx.effect 收集所有 disposer；第一个注册的是 audio backend。
+	const disposeBackend = effectDisposers[0];
+	check(typeof disposeBackend === 'function', 'D5 backend disposer registered', typeof disposeBackend);
 	disposeBackend();
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'D5 pending second BEL cancelled by dispose', s.bells());
@@ -2410,6 +2414,334 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const infinityEnd = tracker.onTurnEnd(session, turnEnd(2, 'completed', Infinity));
 	check(infinityEnd?.durationMs === null, 'D8 Infinity end -> duration null', infinityEnd?.durationMs);
 	report('D8: 非有限 event.time 只按未知时长处理 ✓');
+}
+
+// ---------- E: SSE hub（src/sse.js，playback=browser 实验） ----------
+/** 模拟 node:http ServerResponse：收集 writeHead/write/end，可触发 close。 */
+class FakeRes extends EventEmitter {
+	constructor() {
+		super();
+		this.status = null;
+		this.headers = null;
+		this.chunks = [];
+		this.ended = false;
+	}
+	writeHead(code, headers) { this.status = code; this.headers = headers; }
+	write(chunk) { this.chunks.push(chunk); }
+	end(chunk) { if (chunk !== undefined && chunk !== null) this.chunks.push(chunk); this.ended = true; }
+	/** 触发浏览器断开（页面关闭/网络断）。 */
+	closeNow() { this.emit('close'); }
+	/** 文本视图（SSE 帧等文本场景）。 */
+	get text() { return this.chunks.map((c) => String(c)).join(''); }
+	/** 字节视图（静态 WAV 等二进制场景）。 */
+	get buffer() { return Buffer.concat(this.chunks.map((c) => (Buffer.isBuffer(c) ? c : Buffer.from(String(c))))); }
+}
+
+// E1: attach → SSE 头 + ready 帧 + 连接登记
+{
+	const hub = createSseHub({ heartbeatMs: 15_000 });
+	const res = new FakeRes();
+	hub.attach({ method: 'GET', url: '/notify-bell/events' }, res, { enabled: true, playback: 'browser', soundPack: 'wav', version: PLUGIN_VERSION });
+	check(res.status === 200 && res.headers['content-type'] === 'text/event-stream', 'E1 SSE headers', res.headers);
+	check(res.text.includes('event: ready'), 'E1 ready frame', res.text);
+	check(res.text.includes('"playback":"browser"') && res.text.includes('"soundPack":"wav"'), 'E1 ready payload', res.text);
+	check(hub.connectionCount === 1, 'E1 connection registered', hub.connectionCount);
+	hub.dispose();
+	report('E1: SSE attach + ready 帧 ✓');
+}
+
+// E2: broadcast → notify 帧（JSON 载荷）
+{
+	const hub = createSseHub();
+	const res = new FakeRes();
+	hub.attach({}, res, {});
+	hub.broadcast({ sound: 'done' });
+	check(res.text.includes('event: notify\ndata: {"sound":"done"}\n\n'), 'E2 notify frame', JSON.stringify(res.text));
+	hub.dispose();
+	report('E2: SSE broadcast notify 帧 ✓');
+}
+
+// E3: 浏览器断开 → 连接清理，后续广播不写
+{
+	const hub = createSseHub();
+	const res = new FakeRes();
+	hub.attach({}, res, {});
+	res.closeNow();
+	check(hub.connectionCount === 0, 'E3 close cleanup', hub.connectionCount);
+	hub.broadcast({ sound: 'done' });
+	check(!res.text.includes('event: notify'), 'E3 no write after close', res.text);
+	hub.dispose();
+	report('E3: SSE 断开清理 ✓');
+}
+
+// E4: heartbeat（短间隔注入）→ 注释帧保活
+{
+	const hub = createSseHub({ heartbeatMs: 10 });
+	const res = new FakeRes();
+	hub.attach({}, res, {});
+	hub.start();
+	await sleep(35);
+	check((res.text.match(/: hb /g) ?? []).length >= 2, 'E4 heartbeat frames', res.text);
+	hub.dispose();
+	report('E4: SSE heartbeat ✓');
+}
+
+// E5: 多连接广播 + dispose 全关
+{
+	const hub = createSseHub();
+	const a = new FakeRes();
+	const b = new FakeRes();
+	hub.attach({}, a, {});
+	hub.attach({}, b, {});
+	hub.broadcast({ sound: 'error' });
+	check(a.text.includes('"sound":"error"') && b.text.includes('"sound":"error"'), 'E5 both receive', a.text, b.text);
+	hub.dispose();
+	check(hub.connectionCount === 0 && a.ended && b.ended, 'E5 dispose closes all', hub.connectionCount);
+	report('E5: 多连接 + dispose ✓');
+}
+
+// E6: 写失败（连接已死但 close 未触发）不抛
+{
+	const hub = createSseHub();
+	const dead = new FakeRes();
+	dead.write = () => { throw new Error('socket gone'); };
+	hub.attach({}, dead, {});
+	let threw = false;
+	try { hub.broadcast({ sound: 'block' }); } catch { threw = true; }
+	check(!threw, 'E6 broadcast swallows write errors', threw);
+	hub.dispose();
+	report('E6: 广播写失败不抛 ✓');
+}
+
+// ---------- F: 完整链路（index.js playback=browser：后端分类 → SSE → 不本地播放） ----------
+{
+	const s = setupWithWeb({ enabled: true, playback: 'browser', soundPack: 'default', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	const sseRes = new FakeRes();
+	await s.route.handler({ method: 'GET', url: '/notify-bell/events' }, sseRes);
+	// F1: ready 帧带 browser 状态
+	check(sseRes.status === 200 && sseRes.headers['content-type'] === 'text/event-stream', 'F1 SSE endpoint', sseRes.status);
+	check(sseRes.text.includes('"playback":"browser"') && sseRes.text.includes('"enabled":true'), 'F1 ready payload', sseRes.text);
+	// F2: complete 触发 → SSE 收到 notify 帧；后端（BEL）不响
+	completeTurn(s, 1);
+	await sleep(GAP * 2 + 20);
+	check(sseRes.text.includes('event: notify\ndata: {"sound":"done"}'), 'F2 sse notify done', sseRes.text);
+	check(s.bells().length === 0, 'F2 backend silent (no BEL)', s.bells().length);
+	check(s.logLines().some((l) => l.includes('✓ completed')), 'F2 log still emitted', s.logLines());
+	// F3: 关闭后不再广播
+	sseRes.closeNow();
+	const before = sseRes.text.length;
+	completeTurn(s, 2);
+	await sleep(GAP + 20);
+	check(sseRes.text.length === before, 'F3 no broadcast after close', sseRes.text.slice(before));
+	rmSync(s.dir, { recursive: true, force: true });
+	report('F1-F3: playback=browser 完整链路（SSE 推送 + 后端静默）✓');
+}
+
+// F4: enabled=false → 后端不推 SSE
+{
+	const s = setupWithWeb({ enabled: false, playback: 'browser', soundPack: 'default', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	const sseRes = new FakeRes();
+	await s.route.handler({ method: 'GET', url: '/notify-bell/events' }, sseRes);
+	check(sseRes.text.includes('"enabled":false'), 'F4 ready enabled=false', sseRes.text);
+	completeTurn(s, 1);
+	await sleep(GAP * 2 + 20);
+	check(!sseRes.text.includes('event: notify'), 'F4 no notify when disabled', sseRes.text);
+	check(s.logLines().length === 0, 'F4 no log when disabled', s.logLines());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('F4: enabled=false 不推送 ✓');
+}
+
+// F5: 静态 WAV 服务（sound-showcase/sounds 直接服务，不复制）
+{
+	const s = setupWithWeb({ enabled: true, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	for (const [name, suffix] of [['done', 'done'], ['permission', 'permission'], ['question', 'question'], ['block', 'block'], ['error', 'error']]) {
+		const res = new FakeRes();
+		await s.route.handler({ method: 'GET', url: `/notify-bell/sounds/${name}.wav` }, res);
+		check(res.status === 200 && res.headers['content-type'] === 'audio/wav', `F5 ${name} content-type`, res.status);
+		const onDisk = readFileSync(join(fileURLToPath(new URL('..', import.meta.url)), 'sound-showcase', 'sounds', `${suffix}.wav`));
+		check(res.ended && res.buffer.equals(onDisk), `F5 ${name} body matches showcase file`, res.buffer.length, onDisk.length);
+	}
+	// 未知文件 404
+	const missing = new FakeRes();
+	await s.route.handler({ method: 'GET', url: '/notify-bell/sounds/nope.wav' }, missing);
+	check(missing.status === 404, 'F5 unknown sound 404', missing.status);
+	// 路径穿越/非法名 404
+	const bad = new FakeRes();
+	await s.route.handler({ method: 'GET', url: '/notify-bell/sounds/..%2Findex.js' }, bad);
+	check(bad.status === 404, 'F5 unsafe name 404', bad.status);
+	// POST → 405
+	const post = new FakeRes();
+	await s.route.handler({ method: 'POST', url: '/notify-bell/sounds/done.wav' }, post);
+	check(post.status === 405, 'F5 POST 405', post.status);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('F5: 静态 WAV 服务（showcase 素材直供）✓');
+}
+
+// ---------- G: 浏览器播放器核心（src/browser-audio.js，注入 fake） ----------
+/** fake AudioContext：初始 suspended，resume 后 running；记录 sources/close。 */
+class FakeAudioContext {
+	constructor() {
+		this.state = 'suspended';
+		this.resumes = 0;
+		this.sources = [];
+		this.closed = false;
+		this.destination = {};
+	}
+	async resume() { this.resumes += 1; this.state = 'running'; }
+	async decodeAudioData() { return { fake: true, length: 1 }; }
+	createBufferSource() {
+		const source = { buffer: null, connect: () => {}, start: () => { this.sources.push(source); } };
+		return source;
+	}
+	async close() { this.closed = true; this.state = 'closed'; }
+}
+
+const makeFakeFetch = () => {
+	const calls = [];
+	return {
+		calls,
+		impl: async (url) => {
+			calls.push(url);
+			return { ok: true, arrayBuffer: async () => new ArrayBuffer(4) };
+		}
+	};
+};
+
+// G1: 初始 locked；未 unlock 播放 → 静默失败 + locked 诊断，不抛
+{
+	const fakeFetch = makeFakeFetch();
+	const player = createBrowserAudio({
+		AudioContextCtor: FakeAudioContext,
+		fetchImpl: fakeFetch.impl,
+		attachUnlockListeners: () => () => {}
+	});
+	check(player.getState().locked === true, 'G1 initially locked', player.getState());
+	const result = await player.playSound('done');
+	check(result === false, 'G1 play blocked', result);
+	const state = player.getState();
+	check(state.lastError.includes('autoplay locked'), 'G1 locked diagnostic', state.lastError);
+	check(state.plays === 0 && fakeFetch.calls.length === 0, 'G1 no fetch when locked', fakeFetch.calls);
+	player.dispose();
+	report('G1: autoplay 未解锁 → 静默失败 + locked 状态 ✓');
+}
+
+// G2: unlock（用户手势 handler）→ resume + locked 翻转 + 监听移除
+{
+	let unlockHandler = null;
+	let removed = false;
+	const player = createBrowserAudio({
+		AudioContextCtor: FakeAudioContext,
+		fetchImpl: makeFakeFetch().impl,
+		attachUnlockListeners: (handler) => { unlockHandler = handler; return () => { removed = true; }; }
+	});
+	player.attachUnlockListeners();
+	check(typeof unlockHandler === 'function', 'G2 listener attached', typeof unlockHandler);
+	await unlockHandler();
+	check(player.getState().locked === false, 'G2 unlocked', player.getState());
+	check(player.getState().ready === false, 'G2 ready still false (no ready frame)', player.getState());
+	player.dispose();
+	check(removed === true, 'G2 listeners removed on dispose', removed);
+	report('G2: 用户手势 unlock ✓');
+}
+
+// G3: unlock 后播放 done → fetch 对应 URL + source 启动 + plays=1 + buffer 缓存
+{
+	let unlockHandler = null;
+	const fakeFetch = makeFakeFetch();
+	const player = createBrowserAudio({
+		AudioContextCtor: FakeAudioContext,
+		fetchImpl: fakeFetch.impl,
+		attachUnlockListeners: (handler) => { unlockHandler = handler; return () => {}; }
+	});
+	player.attachUnlockListeners();
+	await unlockHandler();
+	const ok = await player.playSound('done');
+	check(ok === true && player.getState().plays === 1, 'G3 played', ok, player.getState());
+	check(fakeFetch.calls.length === 1 && fakeFetch.calls[0] === '/notify-bell/sounds/done.wav', 'G3 fetch url', fakeFetch.calls);
+	// 第二次播放命中缓存：不再 fetch
+	await player.playSound('done');
+	check(fakeFetch.calls.length === 1, 'G3 buffer cached', fakeFetch.calls.length);
+	player.dispose();
+	report('G3: done → done.wav 播放（含缓存）✓');
+}
+
+// G4: semantic sound 映射表完整（5 个 → /notify-bell/sounds/*.wav）
+{
+	const expected = {
+		done: '/notify-bell/sounds/done.wav',
+		permission: '/notify-bell/sounds/permission.wav',
+		question: '/notify-bell/sounds/question.wav',
+		block: '/notify-bell/sounds/block.wav',
+		error: '/notify-bell/sounds/error.wav'
+	};
+	let ok = true;
+	for (const key of Object.keys(expected)) if (SOUND_URLS[key] !== expected[key]) ok = false;
+	check(ok && Object.keys(SOUND_URLS).length === 5, 'G4 sound url map', SOUND_URLS);
+	report('G4: semantic sound → WAV URL 映射 ✓');
+}
+
+// G5: handleFrame ready/notify；未知 sound 忽略不抛；enabled=false 兜底不播
+{
+	let unlockHandler = null;
+	const fakeFetch = makeFakeFetch();
+	const player = createBrowserAudio({
+		AudioContextCtor: FakeAudioContext,
+		fetchImpl: fakeFetch.impl,
+		attachUnlockListeners: (handler) => { unlockHandler = handler; return () => {}; }
+	});
+	player.attachUnlockListeners();
+	await unlockHandler();
+	// 未知 sound：记录诊断、不抛、不播放
+	player.handleFrame('notify', { sound: 'nope' });
+	await sleep(10);
+	check(player.getState().lastError.includes('unknown sound'), 'G5 invalid sound ignored', player.getState().lastError);
+	check(player.getState().plays === 0 && fakeFetch.calls.length === 0, 'G5 nothing played for invalid sound', player.getState());
+	// ready 帧应用 enabled=false；随后 notify 兜底不播
+	player.handleFrame('ready', { enabled: false, playback: 'browser' });
+	check(player.getState().ready === true && player.getState().enabled === false, 'G5 ready applied', player.getState());
+	player.handleFrame('notify', { sound: 'done' });
+	await sleep(10);
+	check(fakeFetch.calls.length === 0, 'G5 disabled frame not played', fakeFetch.calls);
+	player.dispose();
+	report('G5: ready/notify 帧处理 + 非法 sound 忽略 ✓');
+}
+
+// G6: decode 失败 → 不抛到调用方（play() rejection 不炸 DSH）
+{
+	const BrokenAudio = class extends FakeAudioContext {
+		async decodeAudioData() { throw new Error('corrupt wav'); }
+	};
+	let unlockHandler = null;
+	const player = createBrowserAudio({
+		AudioContextCtor: BrokenAudio,
+		fetchImpl: makeFakeFetch().impl,
+		attachUnlockListeners: (handler) => { unlockHandler = handler; return () => {}; }
+	});
+	player.attachUnlockListeners();
+	await unlockHandler();
+	let threw = false;
+	let result;
+	try { result = await player.playSound('error'); } catch { threw = true; }
+	check(!threw && result === false, 'G6 decode error swallowed', threw, result);
+	check(player.getState().lastError.includes('play failed'), 'G6 diagnostic', player.getState().lastError);
+	player.dispose();
+	report('G6: play() rejection 不抛出 ✓');
+}
+
+// G7: dispose → close AudioContext + 移除监听
+{
+	let removed = false;
+	const player = createBrowserAudio({
+		AudioContextCtor: FakeAudioContext,
+		fetchImpl: makeFakeFetch().impl,
+		attachUnlockListeners: () => { return () => { removed = true; }; }
+	});
+	player.attachUnlockListeners();
+	player.unlock();
+	await sleep(10);
+	player.dispose();
+	check(removed === true, 'G7 listeners removed', removed);
+	report('G7: dispose 清理 ✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');

@@ -172,6 +172,7 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
     }
   },
   "soundPack": "wav",
+  "playback": "backend",
   "wav": {
     "directory": "~/.config/dsh/notify-bell/sounds",
     "fallback": "bell"
@@ -182,6 +183,24 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
   }
 }
 ```
+
+### 播放位置（实验阶段）
+
+`playback` 决定通知声音在哪里播放（`soundPack` 仍是声音素材来源）：
+
+- `backend`（默认）：由本机播放（`soundPack` 决定 BEL 或 WAV），与之前行为一致。
+- `browser`：后端仍负责事件分类与日志，但本机不播放任何声音；后端通过
+  Server-Sent Events（`GET /notify-bell/events`）推送 semantic sound，
+  由 DSH Web 浏览器播放对应的 WAV（`/notify-bell/sounds/*.wav`，直接服务
+  包内 `sound-showcase/sounds` 的素材）。一个通知只播放一次。
+
+本阶段实验说明：
+
+- 浏览器使用 Web Audio；autoplay 策略要求先有一次用户手势
+  （`pointerdown`/`keydown`）才会出声。未解锁时播放静默失败，状态记录在
+  console（`console.debug`），绝不抛出、不影响 DSH 页面。
+- 暂无 `both`、无后端 fallback、无多标签页协调。
+- `enabled=false` 依然全静音：后端不推送、浏览器不播放。
 
 ### 完成任务的最短时长
 

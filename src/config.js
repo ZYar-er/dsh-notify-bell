@@ -14,10 +14,13 @@
  *
  * 事件层只暴露语义化 sound（done / block / permission / error / question）；
  * "响几声/什么节奏/播什么文件"由 backend 内部决定（bell.js / wav.js）。
- * soundPack 选择 backend：'default' → BEL；'wav' → 本地 WAV 文件播放
- * （失败自动 fallback 到 BEL）。旧版 `bellCount` 配置仍然兼容：
- * 1 → done，2 → permission，3 → error，其他值回退该事件的默认 sound；
- * `sound` 优先于 `bellCount`。
+ * soundPack 选择声音素材来源（backend）：'default' → BEL；'wav' → 本地
+ * WAV 文件播放（失败自动 fallback 到 BEL）。
+ * playback 选择播放位置：'backend' → 本机终端（BEL/WAV 后端）；'browser'
+ * → 只通过 SSE 把 semantic sound 推给 DSH Web 客户端，由浏览器播放
+ * （本阶段实验：事件分类仍由后端完成，浏览器只负责播放）。
+ * 旧版 `bellCount` 配置仍然兼容：1 → done，2 → permission，3 → error，
+ * 其他值回退该事件的默认 sound；`sound` 优先于 `bellCount`。
  */
 import { readFileSync, writeFileSync, renameSync, mkdirSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -46,6 +49,13 @@ const BELL_COUNT_TO_SOUND = Object.freeze({
 /** 已实现的 soundPack：'default' → BEL backend；'wav' → 本地音频 backend。 */
 export const VALID_SOUND_PACKS = Object.freeze(['default', 'wav']);
 
+/**
+ * 已实现的 playback：'backend' → 本机终端播放（BEL/WAV）；
+ * 'browser' → 后端只经 SSE 推送 semantic sound，浏览器播放
+ * （实验阶段；事件分类始终在后端，浏览器不复制分类逻辑）。
+ */
+export const VALID_PLAYBACKS = Object.freeze(['backend', 'browser']);
+
 /** WAV backend 的 fallback 策略（当前仅支持回退到 BEL）。 */
 const VALID_WAV_FALLBACKS = Object.freeze(['bell']);
 
@@ -67,6 +77,7 @@ export const DEFAULT_CONFIG = Object.freeze({
 		error: Object.freeze({ enabled: true, sound: 'error' })
 	}),
 	soundPack: 'default',
+	playback: 'backend',
 	wav: Object.freeze({
 		directory: '~/.config/dsh/notify-bell/sounds',
 		fallback: 'bell'
@@ -105,6 +116,7 @@ export const Config = Schema.object({
 		error: eventSchema('error')
 	}),
 	soundPack: Schema.union([...VALID_SOUND_PACKS]).default('default'),
+	playback: Schema.union([...VALID_PLAYBACKS]).default('backend'),
 	wav: Schema.object({
 		directory: Schema.string().default('~/.config/dsh/notify-bell/sounds'),
 		fallback: Schema.union([...VALID_WAV_FALLBACKS]).default('bell')
@@ -215,6 +227,7 @@ export function sanitizeConfig(raw) {
 		cfg.events.error = sanitizeEvent(raw.events.error, cfg.events.error);
 	}
 	if (typeof raw.soundPack === 'string' && VALID_SOUND_PACKS.includes(raw.soundPack)) cfg.soundPack = raw.soundPack;
+	if (typeof raw.playback === 'string' && VALID_PLAYBACKS.includes(raw.playback)) cfg.playback = raw.playback;
 	if (isPlainObject(raw.wav)) {
 		if (typeof raw.wav.directory === 'string' && raw.wav.directory.length > 0) cfg.wav.directory = expandTilde(raw.wav.directory);
 		if (typeof raw.wav.fallback === 'string' && VALID_WAV_FALLBACKS.includes(raw.wav.fallback)) cfg.wav.fallback = raw.wav.fallback;
