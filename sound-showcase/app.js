@@ -106,6 +106,9 @@
 
 	function setPlayState(sound, isPlaying) {
 		playing[sound] = isPlaying;
+		// RAF loop 与播放状态绑定：播放 → 启动，暂停/结束 → 停止。
+		if (isPlaying) startProgressLoop(sound);
+		else stopProgressLoop(sound);
 		var btn = document.querySelector('.play-btn[data-play="' + sound + '"]');
 		if (!btn) return;
 		btn.classList.toggle("playing", isPlaying);
@@ -146,16 +149,48 @@
 		});
 	});
 
-	/* ---------- Progress ---------- */
+	/* ---------- Progress (RAF-driven, smooth) ----------
+	 * 视觉进度由 requestAnimationFrame 每帧驱动（transform: scaleX），
+	 * 不依赖 timeupdate 的节流节奏；时间文字与 aria-valuenow 仍由
+	 * timeupdate 更新（低频，避免每帧改 DOM 文本）。短音频（约
+	 * 0.55–0.94s）下进度条因此连续平滑。
+	 */
+	var rafIds = {};   // sound -> requestAnimationFrame id（每 audio 至多一个 loop）
+	var fillEls = {};  // sound -> .progress-fill element
+
+	function startProgressLoop(sound) {
+		if (rafIds[sound] != null) return; // 不创建重复 loop
+		var el = audioFor(sound);
+		var fill = fillEls[sound];
+		if (!el || !fill) return;
+		var tick = function () {
+			var d = el.duration || 0;
+			if (d > 0) {
+				var pct = el.currentTime / d;
+				if (pct > 1) pct = 1;
+				fill.style.transform = "scaleX(" + pct + ")";
+			}
+			rafIds[sound] = requestAnimationFrame(tick);
+		};
+		rafIds[sound] = requestAnimationFrame(tick);
+	}
+
+	function stopProgressLoop(sound) {
+		if (rafIds[sound] != null) {
+			cancelAnimationFrame(rafIds[sound]);
+			rafIds[sound] = null;
+		}
+	}
+
 	document.querySelectorAll(".card-audio").forEach(function (el) {
 		var sound = el.getAttribute("data-audio");
-		var fill = document.querySelector('.card[data-card="' + sound + '"] .progress-fill');
+		fillEls[sound] = document.querySelector('.card[data-card="' + sound + '"] .progress-fill');
 		var time = document.querySelector('.card[data-card="' + sound + '"] .card-time');
 		var progress = document.querySelector('.card[data-card="' + sound + '"] .progress');
+		// 时间文字与 aria-valuenow：低频更新即可，视觉进度由 RAF 负责。
 		el.addEventListener("timeupdate", function () {
 			var d = el.duration || 0;
 			var pct = d > 0 ? (el.currentTime / d) * 100 : 0;
-			if (fill) fill.style.width = pct + "%";
 			if (progress) progress.setAttribute("aria-valuenow", String(Math.round(pct)));
 			if (time) time.textContent = el.currentTime.toFixed(1) + " / " + d.toFixed(1) + "s";
 		});
@@ -163,6 +198,21 @@
 			var d = el.duration || 0;
 			if (time) time.textContent = "0.0 / " + d.toFixed(1) + "s";
 		});
+		// ended：稳定停在 100%（RAF 已随 setPlayState(false) 停止）。
+		el.addEventListener("ended", function () {
+			var fill = fillEls[sound];
+			if (fill) fill.style.transform = "scaleX(1)";
+		});
+	});
+
+	// 页面隐藏时停止所有 RAF；恢复可见时对仍在播放的音频重启。
+	document.addEventListener("visibilitychange", function () {
+		var active = Object.keys(playing).filter(function (s) { return playing[s]; });
+		if (document.hidden) {
+			active.forEach(stopProgressLoop);
+		} else {
+			active.forEach(startProgressLoop);
+		}
 	});
 
 	/* ---------- Per-card volume ---------- */

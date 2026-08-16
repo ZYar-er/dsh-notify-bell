@@ -392,10 +392,13 @@ main {
 
 .progress-fill {
 	height: 100%;
-	width: 0%;
+	width: 100%;
+	transform: scaleX(0);
+	transform-origin: left center;
 	background: var(--accent);
 	border-radius: 3px;
-	transition: width 0.12s linear;
+	/* RAF 每帧驱动 transform（合成层，避免 layout/reflow）；
+	   不用 transition，避免引入视觉延迟。 */
 }
 
 .card-time {
