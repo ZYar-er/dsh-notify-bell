@@ -2,6 +2,8 @@
 
 [English](./README.md) | [中文](./README.zh.md)
 
+![npm](https://img.shields.io/npm/v/dsh-notify-bell)
+
 为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
 
 > **Developer Preview · v0.10.0**
@@ -76,10 +78,22 @@ WAV 无法播放时，如果存在可用 TTY，则自动 fallback 到终端 BEL�
 
 ## 安装
 
-插件遵循官方 DSH 插件规范（见
-[插件教程](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)）：
-它是声明了 `dsh.bundle` 的 Cordis bundle，自带 `cordis.patch.yml`，
-导出 `Config` schema，使用官方 CLI 安装。在仓库检出目录中：
+插件已发布到 **npm**（包名 `dsh-notify-bell`）。它遵循官方 DSH 插件规范
+（见 [插件教程](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)）：
+声明了 `dsh.bundle` 的 Cordis bundle，自带 `cordis.patch.yml`，
+导出 `Config` schema，使用官方 CLI 安装：
+
+```bash
+dsh plugin --profile web add dsh-notify-bell
+```
+
+`dsh plugin add` 会安装包并把它追加到 profile 的
+`dsh.profile.bundles`，下次启动时自动应用 bundle 层，无需手动修改
+patch 文件。
+
+### 从源码 / GitHub 安装
+
+在仓库检出目录中：
 
 ```bash
 dsh plugin --profile web add ./dsh-notify-bell
@@ -88,12 +102,8 @@ dsh plugin --profile web add ./dsh-notify-bell
 也可以直接从 GitHub 安装（安装的是源码，建议固定 commit 以保证供应链安全）：
 
 ```bash
-dsh plugin --profile web add github:zyar-er/dsh-notify-bell
+dsh plugin --profile web add github:zyar-er/dsh-notify-bell#<commit-sha>
 ```
-
-`dsh plugin add` 会 link 包并把它追加到 profile 的
-`dsh.profile.bundles`，下次启动时自动应用 bundle 层，无需手动修改
-patch 文件。
 
 ## 配置
 

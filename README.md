@@ -2,6 +2,8 @@
 
 [English](./README.md) | [中文](./README.zh.md)
 
+![npm](https://img.shields.io/npm/v/dsh-notify-bell)
+
 Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
 > **Developer Preview · v0.10.0**
@@ -72,11 +74,24 @@ Audio playback failures never crash DSH.
 
 ## Installation
 
-The plugin follows the official DSH plugin format (see the
+Published on **npm** as `dsh-notify-bell`. The plugin follows the official
+DSH plugin format (see the
 [plugin tutorials](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)):
 it is a Cordis bundle that declares its own `cordis.patch.yml` via
 `dsh.bundle`, exports a `Config` schema, and installs with the official
-CLI. From a checkout of this repository:
+CLI:
+
+```bash
+dsh plugin --profile web add dsh-notify-bell
+```
+
+`dsh plugin add` installs the package and appends it to the profile's
+`dsh.profile.bundles`, so the bundle layer is applied automatically on the
+next boot. No manual patch editing is required.
+
+### From source / GitHub
+
+From a checkout of this repository:
 
 ```bash
 dsh plugin --profile web add ./dsh-notify-bell
@@ -86,12 +101,8 @@ Or install straight from GitHub (sources only, so pin a commit for
 supply-chain safety):
 
 ```bash
-dsh plugin --profile web add github:zyar-er/dsh-notify-bell
+dsh plugin --profile web add github:zyar-er/dsh-notify-bell#<commit-sha>
 ```
-
-`dsh plugin add` links the package and appends it to the profile's
-`dsh.profile.bundles`, so the bundle layer is applied automatically on the
-next boot. No manual patch editing is required.
 
 ## Configuration
 
