@@ -46,7 +46,7 @@ window.__ModuleLoader__.load({
 		// 浅色/深色由 body[data-ds-dark-theme] 的 token 覆盖自动适配。
 		var POPOVER_CSS = [
 			".nb-popover{box-sizing:border-box;position:absolute;top:calc(100% + 4px);right:0;z-index:1200;width:220px;max-width:calc(100vw - 24px);padding:6px;display:flex;flex-direction:column;gap:2px;background:var(--dsw-specific-menu);border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);text-align:left}",
-			".nb-popover-title{font-size:12px;font-weight:600;line-height:1.2;margin:6px 6px 4px;color:var(--dsw-alias-label-dimmed)}",
+			".nb-popover-title{font-size:12px;font-weight:600;line-height:16px;margin:4px 4px 2px;padding:2px 6px;color:var(--dsw-alias-label-tertiary)}",
 			".nb-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}",
 			".nb-row svg{flex:none;width:16px;height:16px;color:var(--dsw-alias-label-secondary)}",
 			".nb-row-label{flex:1;font-size:13px}",
