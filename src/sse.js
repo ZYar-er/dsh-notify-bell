@@ -24,7 +24,10 @@
  */
 export function createSseHub(options = {}) {
 	const heartbeatMs = options.heartbeatMs ?? 15_000;
-	const maxConnections = options.maxConnections ?? 8;
+	// 类型/范围校验：NaN 会让上限退化失效，负数会拒绝全部连接。
+	const maxConnections = Number.isSafeInteger(options.maxConnections) && options.maxConnections > 0
+		? options.maxConnections
+		: 8;
 	const connections = new Set();
 	let timer = null;
 
@@ -81,9 +84,10 @@ export function createSseHub(options = {}) {
 		});
 	};
 
-	/** 开始心跳（幂等）。 */
+	/** 开始心跳（幂等；无连接时不启动，避免空转）。 */
 	const start = () => {
 		if (timer !== null || heartbeatMs <= 0) return;
+		if (connections.size === 0) return;
 		timer = setInterval(() => {
 			const frame = `: hb ${Date.now()}\n\n`;
 			for (const res of connections) {

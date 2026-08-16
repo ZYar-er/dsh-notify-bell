@@ -1328,7 +1328,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const err = bellView(true, true);
 	check(err.title === 'Failed to update notifications setting', 'Y9 error title', err);
 	const loading = bellView(null);
-	check(loading.ready === false, 'Y9 loading state', loading);
+	check(loading.ready === true, 'Y9 button always clickable (opens popover to retry)', loading.ready);
 	report('Y9: bellView 纯函数 ✓');
 
 	// Y10: bellRpc（mock fetch）
@@ -2649,6 +2649,35 @@ class FakeRes extends EventEmitter {
 	check(c.status === 503 && c.ended && !c.text.includes('event: ready'), 'E8 rejected with 503', c.status, c.text.slice(0, 60));
 	hub.dispose();
 	report('E8: SSE 连接上限 ✓');
+}
+
+// E9: 零连接时 start() 不启动心跳（避免空转）；有连接后才启动
+{
+	const hub = createSseHub({ heartbeatMs: 10 });
+	hub.start(); // 零连接：应直接返回
+	const res = new FakeRes();
+	hub.attach({}, res, {});
+	await sleep(35);
+	check(!res.text.includes(': hb'), 'E9 no idle heartbeat after zero-connection start', res.text);
+	hub.start(); // 现在有连接：启动
+	await sleep(25);
+	check(res.text.includes(': hb'), 'E9 heartbeat starts with connection', res.text.slice(0, 120));
+	hub.dispose();
+	report('E9: 零连接不启动心跳 ✓');
+}
+
+// E10: 非法 maxConnections（NaN/负数/非整数）→ 回退默认 8
+{
+	for (const bad of [NaN, -1, 0, 2.5, 'x']) {
+		const hub = createSseHub({ maxConnections: bad });
+		const a = new FakeRes();
+		const b = new FakeRes();
+		hub.attach({}, a, {});
+		hub.attach({}, b, {});
+		check(hub.connectionCount === 2 && a.status === 200 && b.status === 200, `E10 invalid maxConnections (${String(bad)}) falls back`, hub.connectionCount);
+		hub.dispose();
+	}
+	report('E10: 非法 maxConnections 回退默认 ✓');
 }
 
 // ---------- F: 完整链路（index.js playback=browser：后端分类 → SSE → 不本地播放） ----------

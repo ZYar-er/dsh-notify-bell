@@ -87,6 +87,8 @@ window.__ModuleLoader__.load({
 		/** 把 (enabled, error) 映射为按钮视图（图标/文案/title/aria）。
 		 * 按钮现在打开通知设置 popover（不再是直接 toggle）；图标只代表
 		 * enabled 状态（bell / bell-slash），与 playback 无关。
+		 * 按钮永不 disabled：初始 GET 失败时也可点击打开 popover 触发
+		 * 重试（popover 内的控件在状态未加载时禁用）。
 		 * @param t - 可选翻译函数（官方 locale seat）；缺失时英文 fallback。 */
 		function bellView(enabled, error, t) {
 			var on = enabled === true;
@@ -97,7 +99,7 @@ window.__ModuleLoader__.load({
 				label: label,
 				title: title,
 				pressed: on,
-				ready: enabled !== null
+				ready: true
 			};
 		}
 		exports.bellView = bellView;
