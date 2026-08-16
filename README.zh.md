@@ -316,3 +316,11 @@ DSH 目前仍处于 Developer Preview 阶段，其插件与事件 API 未来可�
 图标使用 [Phosphor Icons](https://phosphoricons.com/)。
 
 本项目为 [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness) 提供通知能力。
+
+## 许可证
+
+dsh-notify-bell 的源代码采用
+[MIT License](./LICENSE) 授权。
+
+本项目同时分发第三方声音及图标素材。
+相关授权和署名信息请参阅 [NOTICE.md](./NOTICE.md)。

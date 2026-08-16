@@ -295,3 +295,11 @@ Sound assets are from [react-sounds](https://github.com/e3ntity/react-sounds).
 Icons use [Phosphor Icons](https://phosphoricons.com/).
 
 Built for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness).
+
+## License
+
+The dsh-notify-bell source code is licensed under the
+[MIT License](./LICENSE).
+
+This repository also distributes third-party sound and icon assets.
+See [NOTICE.md](./NOTICE.md) for their respective licenses and attribution.

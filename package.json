@@ -2,6 +2,7 @@
   "name": "dsh-notify-bell",
   "version": "0.9.0",
   "private": true,
+  "license": "MIT",
   "description": "DSH notification plugin with semantic sounds (done/block/permission/question/error): goal complete/block, approval/asked, ask_user_question, and agent/error notify via BEL or WAV. Web bell toggle in the session header controls enabled state at runtime. Configurable via ~/.config/dsh/notify-bell.json (legacy bellCount still accepted).",
   "type": "module",
   "main": "src/index.js",
@@ -20,7 +21,9 @@
     "src",
     "sound-showcase",
     "README.md",
-    "README.zh.md"
+    "README.zh.md",
+    "LICENSE",
+    "NOTICE.md"
   ],
   "dsh": {
     "client": {
