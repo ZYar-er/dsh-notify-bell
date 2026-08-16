@@ -2,7 +2,7 @@
 
 [English](./README.md) | [中文](./README.zh.md) | [Changelog](./CHANGELOG.md)
 
-![npm](https://img.shields.io/npm/v/dsh-notify-bell)
+[![npm](https://img.shields.io/npm/v/dsh-notify-bell)](https://www.npmjs.com/package/dsh-notify-bell) [![GitHub Release](https://img.shields.io/github/v/release/ZYar-er/dsh-notify-bell)](https://github.com/ZYar-er/dsh-notify-bell/releases/latest)
 
 **DeepSeek Harness (DSH) 社区插件** — 语义化提示音通知。
 
