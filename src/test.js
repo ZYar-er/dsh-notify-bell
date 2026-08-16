@@ -992,6 +992,33 @@ const approvalEvent = (overrides = {}) => ({
 	report('W9: WAV dispose 终止播放进程并关闭后端 ✓');
 }
 
+// W10: spawn 返回 null 或 on() 抛错 → fallback BEL，且不残留 child 状态
+{
+	const fakeBell = { playCalls: [], play: (sound) => fakeBell.playCalls.push(sound), dispose: () => {} };
+	const nullWav = createWavBackend({
+		platform: 'windows',
+		directory: '/sounds',
+		player: { cmd: 'powershell.exe' },
+		spawn: () => null,
+		existsSync: () => true,
+		bell: fakeBell
+	});
+	nullWav.play('done');
+	check(fakeBell.playCalls.length === 1 && fakeBell.playCalls[0] === 'done', 'W10 null spawn falls back once', fakeBell.playCalls);
+
+	const throwWav = createWavBackend({
+		platform: 'windows',
+		directory: '/sounds',
+		player: { cmd: 'powershell.exe' },
+		spawn: () => ({ on: () => { throw new Error('listener boom'); } }),
+		existsSync: () => true,
+		bell: fakeBell
+	});
+	throwWav.play('block');
+	check(fakeBell.playCalls.length === 2 && fakeBell.playCalls[1] === 'block', 'W10 listener throw falls back once', fakeBell.playCalls);
+	report('W10: 异常 spawn 安全 fallback ✓');
+}
+
 // ---------- X: v7 平台 backend 新增 ----------
 // X1: 平台检测（win32 / WSL env / /proc/version / 普通 linux / other）
 {
@@ -2200,6 +2227,26 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	report('C1-15: 非 completed 后完整重放不通知 ✓');
 }
 
+// C1-16: max-tokens 结束后完整重放同 turn（start + final text + completed）→ 不通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(16, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(16, 'max-tokens 原任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(16, '被截断的回答', t0 + 10));
+	s.emit('session/event', MAIN_SESSION, turnEnd(16, 'max-tokens', t0 + 1_000));
+	// 完整重放同 turn，并补齐 final text + completed
+	s.emit('session/event', MAIN_SESSION, turnStart(16, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(16, 'max-tokens 原任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(16, '重放后的最终回答', Date.now() - 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(16, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-16 full replay after max-tokens silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-16: max-tokens 后完整重放不通知 ✓');
+}
+
 // ---------- D: v0.11.1 防御/资源修复 ----------
 // D1: delegationDepth 为 null / 非数字字符串 → 保守不通知（不误当主会话）
 {
@@ -2283,6 +2330,20 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	report('D4: 去重容器有界（FIFO）✓');
 }
 
+// D4b: 逐 session 去重容器同样有界（maxDedupeKeys 注入为 2）
+{
+	const s = setup({ events: { approval: { sound: 'done' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin({ maxDedupeKeys: 2 });
+	for (const id of ['req-a', 'req-b', 'req-c', 'req-a']) {
+		s.emit('session/event', MAIN_SESSION, approvalEvent({ id }));
+	}
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 4, 'D4b per-session FIFO admits a,b,c,a', s.logLines());
+	check(s.bells().length === 4, 'D4b one BEL per admitted approval', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('D4b: 逐 session 去重容器有界（FIFO）✓');
+}
+
 // D5: backend 纳入 ctx.effect 生命周期 → 卸载/HMR 时取消未决第二声
 {
 	const s = setup({ events: { block: { sound: 'block' } }, bell: { gapMs: GAP, permissionGapMs: GAP } });
@@ -2332,6 +2393,21 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(l.length === 1 && l[0].includes('新回合摘要'), 'D7 currentTurns preserved across stale end', l);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('D7: 迟到旧 turn/end 不清当前 turn ✓');
+}
+
+// D8: NaN/Infinity event.time 不进入 duration（视为未知时长）
+{
+	const tracker = createTurnTracker();
+	const session = { id: 'session-nonfinite-time', header: { id: 'session-nonfinite-time' } };
+	tracker.onTurnStart(session, { type: 'turn/start', time: NaN, data: { turn: 1 } });
+	tracker.onAssistantMessage(session, assistantText(1, 'NaN start 的最终回答', 110));
+	const nanStart = tracker.onTurnEnd(session, turnEnd(1, 'completed', 120));
+	check(nanStart?.durationMs === null, 'D8 NaN start -> duration null', nanStart?.durationMs);
+	tracker.onTurnStart(session, { type: 'turn/start', time: Infinity, data: { turn: 2 } });
+	tracker.onAssistantMessage(session, assistantText(2, 'Infinity end 的最终回答', 210));
+	const infinityEnd = tracker.onTurnEnd(session, turnEnd(2, 'completed', Infinity));
+	check(infinityEnd?.durationMs === null, 'D8 Infinity end -> duration null', infinityEnd?.durationMs);
+	report('D8: 非有限 event.time 只按未知时长处理 ✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');

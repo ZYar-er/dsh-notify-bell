@@ -42,7 +42,7 @@ export function classifyGoalChange(change) {
 		goal,
 		objective: goal?.objective ?? null,
 		createdAt: typeof goal?.createdAt === 'number' ? goal.createdAt : null,
-		// 防重复：同一 (goal id, revision) 只通知一次。
+		// 去重窗口内同一 (goal id, revision) 只通知一次；窗口满后 FIFO 淘汰，退化为 best-effort。
 		dedupeKey: ref ? `${ref.id}@${ref.revision}` : `goal:${change.operation}:${goal?.id ?? 'unknown'}`
 	};
 }
@@ -67,7 +67,7 @@ export function classifyApproval(session, event) {
 		toolName: typeof data.toolName === 'string' && data.toolName.length > 0 ? data.toolName : '(unknown tool)',
 		// reason 缺失时为 null，日志层不输出 undefined/null。
 		reason: typeof data.reason === 'string' && data.reason.length > 0 ? data.reason : null,
-		// 防重复：同一 (session, approval id) 只通知一次。
+		// 去重窗口内同一 (session, approval id) 只通知一次；窗口满后 best-effort。
 		dedupeKey: `approval:${sessionId}:${id}`
 	};
 }
@@ -109,7 +109,7 @@ export function classifyQuestion(session, event) {
 		questionText: typeof first.question === 'string' && first.question.length > 0 ? first.question : null,
 		optionsCount: Array.isArray(first.options) ? first.options.length : 0,
 		questionCount: questions.length,
-		// 防重复：同一 (session, tool callId) 只通知一次（callId durable 且全局唯一）。
+		// 去重窗口内同一 (session, tool callId) 只通知一次（callId durable）；窗口满后 best-effort。
 		dedupeKey: `question:${session?.id ?? 'unknown'}:${data.callId ?? 'unknown'}`
 	};
 }

@@ -171,11 +171,9 @@ export function createTurnTracker(options = {}) {
 		entry.lastAssistantMessage = {
 			order: stamp.order,
 			seq: stamp.seq,
-			time: stamp.time,
 			hasText,
 			hasToolCall
 		};
-		entry.lastAssistantMessageTime = stamp.time;
 	};
 
 	/**
@@ -190,10 +188,8 @@ export function createTurnTracker(options = {}) {
 		const stamp = stampEvent(event);
 		entry.lastToolCall = {
 			order: stamp.order,
-			seq: stamp.seq,
-			time: stamp.time
+			seq: stamp.seq
 		};
-		entry.lastToolCallTime = stamp.time;
 	};
 
 	/**

@@ -239,8 +239,10 @@ it was claimed) and tool-call-only/concludes-turn endings are silently ignored.
 `goal/changed` with `operation = complete` no longer plays a sound.
 
 The duration is `turn/end.time - turn/start.time`; requests shorter than
-`minDuration` are logged but do not play a sound, and a completion without a
-recorded `turn/start` (plugin loaded mid-turn) is logged without a sound.
+`minDuration` are logged but do not play a sound. If the plugin loads mid-turn
+but still observes the final `assistant/message`, the completion is logged
+without a sound; if it loads only after that final answer, the turn stays
+silent because the final-answer condition cannot be verified.
 
 ### Approval
 

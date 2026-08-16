@@ -186,16 +186,25 @@ export function createAudioBackend(options = {}) {
 		const args = player.buildArgs(target);
 		try {
 			const child = spawnImpl(player.cmd, args, { stdio: 'ignore', windowsHide: true });
+			if (!child || typeof child.on !== 'function') {
+				fallback();
+				return;
+			}
 			children.add(child);
 			const forget = () => children.delete(child);
-			child.on('error', () => {
+			try {
+				child.on('error', () => {
+					forget();
+					fallback();
+				});
+				child.on('exit', (code) => {
+					forget();
+					if (code !== 0) fallback();
+				});
+			} catch (error) {
 				forget();
-				fallback();
-			});
-			child.on('exit', (code) => {
-				forget();
-				if (code !== 0) fallback();
-			});
+				throw error;
+			}
 		} catch {
 			fallback();
 		}

@@ -238,8 +238,9 @@ data.reason.kind = completed
 会被完全静默忽略。`goal/changed` 的 `operation = complete` 不再播放声音。
 
 时长定义为 `turn/end.time - turn/start.time`；短于 `minDuration` 的请求
-只输出日志，不播放声音；缺少对应 `turn/start`（插件在回合中途加载）时
-也只输出日志，不播放声音。
+只输出日志，不播放声音。如果插件在回合中途加载、但仍观察到了最终
+`assistant/message`，则只输出日志、不播放声音；如果是在最终回答之后才
+加载，则保持静默（无法验证最终回答条件）。
 
 ### 审批
 
