@@ -6,6 +6,8 @@ Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/dee
 
 > **Developer Preview · v0.9.0**
 
+🎧 **[Listen to the notification sounds →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
+
 dsh-notify-bell lets you step away from the DSH Web UI without missing important agent events.
 
 Instead of notifying on every internal event, it focuses on moments when the agent actually needs your attention:
@@ -17,20 +19,6 @@ Instead of notifying on every internal event, it focuses on moments when the age
 - ✗ **Error** — the agent encountered an error
 
 Each event uses a distinct semantic sound rather than encoding meaning by counting beeps.
-
-## Sound Preview
-
-🎧 **[Listen to all notification sounds](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
-
-| Event | Sound | Source | Duration |
-|---|---|---|---:|
-| Complete | `ui/success_bling` | react-sounds | 0.76s |
-| Approval | `notification/notification` | react-sounds | 0.86s |
-| Question | `notification/info` | react-sounds | 0.86s |
-| Blocked | `ui/blocked` | react-sounds | 0.89s |
-| Error | `notification/error` | react-sounds | 0.55s |
-
-The audio files are bundled locally with the plugin. The plugin does not depend on the react-sounds runtime or CDN.
 
 ## Features
 

@@ -6,6 +6,8 @@
 
 > **Developer Preview · v0.9.0**
 
+🎧 **[试听通知声音 →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
+
 dsh-notify-bell 让你不必一直盯着 DSH Web 页面，也不会错过 Agent 真正需要你介入的时刻。
 
 它不会对每一个内部事件都发出通知，而是专注于这些需要用户注意的状态：
@@ -17,20 +19,6 @@ dsh-notify-bell 让你不必一直盯着 DSH Web 页面，也不会错过 Agent 
 - ✗ **错误** — Agent 遇到了错误
 
 每种事件都有独立的语义声音，而不是通过“响几声”来表达不同含义。
-
-## 声音试听
-
-🎧 **[试听全部通知声音](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
-
-| 事件 | 声音 | 来源 | 时长 |
-|---|---|---|---:|
-| 完成 | `ui/success_bling` | react-sounds | 0.76s |
-| 审批 | `notification/notification` | react-sounds | 0.86s |
-| 提问 | `notification/info` | react-sounds | 0.86s |
-| 受阻 | `ui/blocked` | react-sounds | 0.89s |
-| 错误 | `notification/error` | react-sounds | 0.55s |
-
-声音文件会随插件本地提供，运行时不依赖 react-sounds 的 React 库或 CDN。
 
 ## 特性
 
