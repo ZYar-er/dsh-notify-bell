@@ -4,9 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/dsh-notify-bell)](https://www.npmjs.com/package/dsh-notify-bell) [![GitHub Release](https://img.shields.io/github/v/release/ZYar-er/dsh-notify-bell)](https://github.com/ZYar-er/dsh-notify-bell/releases/latest)
 
-**DeepSeek Harness (DSH) 社区插件** — 语义化提示音通知。
-
-为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
+**DeepSeek Harness (DSH) 社区插件**，为重要的 Agent 事件提供语义化提示音通知。
 
 > **Developer Preview · v0.12.0**
 
@@ -16,82 +14,41 @@ dsh-notify-bell 让你不必一直盯着 DSH Web 页面，也不会错过 Agent 
 
 它不会对每一个内部事件都发出通知，而是专注于这些需要用户注意的状态：
 
-- ✓ **完成** — 任务已经完成
+- ✓ **完成** — Agent 完成了最终回答
 - 🔐 **审批** — 某个工具操作需要你的批准
 - ❓ **提问** — Agent 正在等待你的回答
 - ⚠ **受阻** — 当前目标无法继续
-- ✗ **错误** — Agent 遇到了错误
+- ✗ **错误** — Agent 遇到了一次 Agent 级错误
 
-每种事件都有独立的语义声音，而不是通过“响几声”来表达不同含义。
+每种事件都有独立的语义声音，而不是靠“重复响几声”来表达含义。
 
 ## 特性
 
 - 支持完成、审批、提问、受阻、错误五种语义通知
-- 官方 Cordis 插件规范：导出 `Config` schema（非法配置加载即失败）+ `dsh.bundle` patch
-- WAV 声音包
-- BEL 提示音 fallback
-- Windows 原生音频播放
-- WSL → Windows 音频播放
-- Linux 原生音频播放
-- DSH Web 内运行时静音/开启
+- DSH Web 浏览器播放
+- Windows、WSL、Linux 本机播放
+- DSH Web 一键静音/开启
+- 播放方式选择：**浏览器 / 后端 / 静音**
 - 浅色/深色主题适配
-- Phosphor `bell` / `bell-slash` 图标
-- 每个事件可以独立配置声音
-- 可设置完成任务的最短通知时长
-- 音频播放失败自动 fallback
+- Phosphor `bell` / `bell-slash` 通知按钮
+- WAV 声音包
+- 后端播放的 BEL fallback
+- 可配置的通知声音
+- 可配置的完成通知最短时长
+- 官方 DSH Cordis 插件形态，带 schema 校验
 - 除官方 `@deepseek-ai/schemastery` 外，无其他运行时依赖
-
-## 平台支持
-
-### Windows / WSL
-
-Windows 和 WSL 使用：
-
-```text
-PowerShell
-  → System.Media.SoundPlayer
-  → Windows Audio
-```
-
-WSL 环境会自动使用 `wslpath` 将路径转换为 Windows 路径。
-
-### Linux
-
-插件会自动探测系统中已有的播放器，优先级为：
-
-```text
-paplay
-pw-play
-aplay
-ffplay
-```
-
-插件不会自动安装任何播放器。
-
-### Fallback
-
-WAV 无法播放时，如果存在可用 TTY，则自动 fallback 到终端 BEL：
-
-```text
-\a
-```
-
-音频播放失败不会导致 DSH 崩溃。
 
 ## 安装
 
-插件已发布到 **npm**（包名 `dsh-notify-bell`）。它遵循官方 DSH 插件规范
-（见 [插件教程](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)）：
-声明了 `dsh.bundle` 的 Cordis bundle，自带 `cordis.patch.yml`，
-导出 `Config` schema，使用官方 CLI 安装：
+从 npm 安装：
 
 ```bash
 dsh plugin --profile web add dsh-notify-bell
 ```
 
 `dsh plugin add` 会安装包并把它追加到 profile 的
-`dsh.profile.bundles`，下次启动时自动应用 bundle 层，无需手动修改
-patch 文件。
+`dsh.profile.bundles`，下次启动时自动应用 bundle 层。如果 `dsh web`
+正在运行，重启即可。
 
 ### 从源码 / GitHub 安装
 
@@ -101,46 +58,153 @@ patch 文件。
 dsh plugin --profile web add ./dsh-notify-bell
 ```
 
-也可以直接从 GitHub 安装（安装的是源码，建议固定 commit 以保证供应链安全）：
+开发版本或源码测试，可以直接从 GitHub 安装：
 
 ```bash
 dsh plugin --profile web add github:zyar-er/dsh-notify-bell#<commit-sha>
 ```
 
+直接从 GitHub 安装时，建议固定 commit 以保证供应链安全。
+
+## 快速开始
+
+启动 DSH Web 后，**Session log** 旁会出现通知铃铛：
+
+```text
+Session log   🔔
+```
+
+点击铃铛打开通知设置。
+
+![通知设置弹层](./sound-showcase/assets/settings-menu-zh.png)
+
+你可以控制：
+
+- **通知** — 开启或关闭所有通知声音
+- **播放方式** — 选择声音在哪里播放：
+  - **浏览器**
+  - **后端**
+  - **静音**
+
+更改立即生效并自动持久化。
+
+## 播放方式
+
+### 浏览器
+
+DSH Web 推荐使用。
+
+后端负责分类通知事件，并通过 SSE 把语义声音事件推送到浏览器，浏览器用 Web Audio 播放包内自带的 WAV 文件。
+
+```text
+DSH 后端
+   ↓
+SSE
+   ↓
+DSH Web
+   ↓
+Web Audio
+   ↓
+WAV
+```
+
+受浏览器 autoplay 策略限制，首次出声前需要先与页面有一次正常的用户交互。
+
+解锁之后，即使把 DSH 标签页放在后台、在别的标签页工作，也仍然可以播放。
+
+浏览器播放**不**使用浏览器 Notification API，也不需要通知权限。
+
+### 后端
+
+声音在本机播放，而不是在浏览器内播放。
+
+Windows 与 WSL：
+
+```text
+PowerShell
+  → System.Media.SoundPlayer
+  → Windows Audio
+```
+
+Linux 按以下顺序自动探测可用播放器：
+
+```text
+paplay
+pw-play
+aplay
+ffplay
+```
+
+WAV 无法播放时，如果存在可用 TTY，后端播放可以 fallback 到终端 BEL。
+
+### 静音
+
+只输出通知日志，不播放任何声音。
+
+### 选择播放方式
+
+可以在通知设置弹层里随时切换播放方式，无需重启 DSH。
+
+配置：
+
+```json
+{
+  "playback": "browser"
+}
+```
+
+可选值：
+
+```text
+browser
+backend
+none
+```
+
+目前没有自动的浏览器 → 后端 fallback，也没有 `both` 模式。所选模式是有意为之：一条通知只由一个播放后端处理。
+
+## 通知声音
+
+| 事件 | 声音 | 来源 | 时长 |
+| --- | --- | --- | ---: |
+| ✓ 完成 | `ui/success_bling` | react-sounds | 0.76s |
+| 🔐 审批 | `notification/notification` | react-sounds | 0.86s |
+| ❓ 提问 | `notification/info` | react-sounds | 0.86s |
+| ⚠ 受阻 | `ui/blocked` | react-sounds | 0.89s |
+| ✗ 错误 | `notification/error` | react-sounds | 0.55s |
+
+🎧 **[试听全部声音](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
+
+每种通知都有独立的声音标识，而不是靠重复响铃次数来区分。
+
 ## 配置
 
-插件导出 Schemastery `Config` schema：Cordis 在加载时校验插件行的
-`config` 并填充默认值，非法配置会直接加载失败（fail loudly），
-而不是被静默忽略。
+插件遵循官方 DSH Cordis 配置模型，并导出 Schemastery `Config` schema：
+profile 的 `cordis.patch.yml` 中插件行的 `config` 块会在加载时被校验并
+填充默认值，非法配置直接加载失败。
 
-### 通过 profile patch 配置（推荐）
-
-在 profile 的 `cordis.patch.yml`（或你自己的 `--patch` 覆盖层）中为
-插件行添加 `config`：
+示例（profile patch）：
 
 ```yaml
 - id: notify-bell
   config:
     minDuration: 10
-    soundPack: wav
-    events:
-      complete:
-        sound: done
-      block:
-        sound: block
+    playback: backend
 ```
 
-### 通过 legacy 配置文件
-
-插件同时读取 `~/.config/dsh/notify-bell.json`（可用环境变量
-`DSH_NOTIFY_BELL_CONFIG` 覆盖路径）。该文件是运行时状态层：Web 铃铛
-开关把 `enabled` 持久化到这里，也保证旧部署继续可用。合并优先级：
+legacy 运行时状态文件位于：
 
 ```text
-cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
+~/.config/dsh/notify-bell.json
 ```
 
-示例文件：
+其路径可以用以下环境变量覆盖：
+
+```text
+DSH_NOTIFY_BELL_CONFIG
+```
+
+Web 界面会把 `enabled` 与 `playback` 持久化到这里。示例文件：
 
 ```json
 {
@@ -184,68 +248,41 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
 }
 ```
 
-### 播放位置
-
-`playback` 决定通知声音在哪里播放（`soundPack` 只影响
-`playback: backend`；浏览器始终播放包内自带的 WAV 素材）。
-默认 `browser`；也可以直接在 DSH Web 界面点右上角铃铛，在设置弹层里
-实时切换（无需重启）：
-
-- `browser`：后端仍负责事件分类与日志，但本机不播放任何声音；后端通过
-  Server-Sent Events（`GET /notify-bell/events`）推送 semantic sound，
-  由 DSH Web 浏览器播放对应的 WAV（`/notify-bell/sounds/*.wav`，直接服务
-  包内 `sound-showcase/sounds` 的素材）。一个通知只播放一次。
-- `backend`：由本机播放（`soundPack` 决定 BEL 或 WAV），浏览器不响。
-- `none`：只保留日志——不推送到浏览器、本机也不播放。
-
-浏览器说明：
-
-- 浏览器使用 Web Audio；autoplay 策略要求先有一次用户手势
-  （`pointerdown`/`keydown`）才会出声。未解锁时播放静默失败，状态记录在
-  console（`console.debug`），绝不抛出、不影响 DSH 页面。
-- 暂无 `both`、无后端 fallback、无多标签页协调。
-- `enabled=false` 依然全静音：后端不推送、浏览器不播放。`enabled` 与
-  `playback` 是两个独立设置。
-
 ### 完成任务的最短时长
 
-默认情况下，运行时间短于 `minDuration` 的任务只记录日志，不播放完成声音。
+运行时间短于 `minDuration` 的任务不播放完成声音。
 
 审批和提问不受该限制，因为这两种状态意味着 Agent 正在等待用户处理。
 
 ### 运行时静音
 
-DSH Web 中的通知按钮可以实时开启或关闭通知。
+`enabled` 控制所有通知播放。
 
 关闭后：
 
-- 所有通知声音都会静音
-- DSH Agent 正常运行
+- 不向浏览器推送声音
+- 本机不播放声音
+- DSH 继续正常运行
 - 其他配置保持不变
-- 不需要重启 DSH
+- 无需重启
 
-## Web UI
+### 配置来源
 
-插件会在右上角 **Session log** 按钮旁增加通知按钮（bell）：
+显式插件配置优先于 legacy 运行时状态文件：
 
 ```text
-Session log   🔔
+cordis 配置  >  notify-bell.json  >  schema 默认值
 ```
 
-点击铃铛打开通知设置弹层：
+对普通用户来说，通过 Web 界面修改通知状态和播放方式是最方便的方式。
 
-- **通知**：On/Off 开关（开启 = bell，关闭 = bell-slash 图标）
-- **播放方式**：Browser（浏览器播放）/ Backend（本机播放）/ None（静音）
-
-设置实时生效并持久化到 `~/.config/dsh/notify-bell.json`，无需重启 DSH。
-图标会自动适配浅色和深色主题。
-
-## 事件说明
+## 事件行为
 
 ### 完成
 
-当 Agent 完成对用户请求的最终回答时触发 —— 即 DSH Web UI 自身用来
-关闭一轮回复的持久化会话事件：
+完成通知意味着 Agent 已经完成当前回合的最终回答。
+
+通知依据：
 
 ```text
 session/event
@@ -253,20 +290,22 @@ type = turn/end
 data.reason.kind = completed
 ```
 
-只通知主会话（`delegationDepth >= 1` 的子代理回合会被忽略），并且该
-回合必须真正产生最终 assistant 文本回答：最后一个 `assistant/message`
-必须包含非空 `text` block，且其后不得再出现 `tool/call`。空 no-op 回合
-（排队消息在 claim 前被清除）和 tool-call-only / concludes-turn 结束
-会被完全静默忽略。`goal/changed` 的 `operation = complete` 不再播放声音。
+该回合必须包含真正的最终 assistant 文本回答。空 no-op 回合与
+tool-call-only 的 `concludesTurn` 结束不会触发完成声音。
 
-时长定义为 `turn/end.time - turn/start.time`；短于 `minDuration` 的请求
-只输出日志，不播放声音。如果插件在回合中途加载、但仍观察到了最终
-`assistant/message`，则只输出日志、不播放声音；如果是在最终回答之后才
-加载，则保持静默（无法验证最终回答条件）。
+子代理回合会被忽略。
+
+完成时长按：
+
+```text
+turn/start.time → turn/end.time
+```
+
+计算。短于 `minDuration` 的请求只记录日志，不播放完成声音。
 
 ### 审批
 
-监听持久化事件：
+监听：
 
 ```text
 approval/asked
@@ -274,28 +313,19 @@ approval/asked
 
 表示某个工具操作正在等待用户批准。
 
-用户完成批准或拒绝后：
-
-```text
-approval/decided
-```
-
-不会再次通知。
+`approval/decided` 不会再次通知。
 
 ### 提问
 
-监听持久化 session event：
+当 Agent 调用：
 
 ```text
-tool/call
-name = ask_user_question
+ask_user_question
 ```
 
-表示 Agent 明确向用户提问并等待回答。
+时触发，表示 Agent 正在等待用户回答。
 
-用户回答后不会再次通知。
-
-普通 Assistant 文本中出现问号不会触发此通知。
+用户回答本身不会再次通知。
 
 ### 受阻
 
@@ -306,21 +336,86 @@ goal/changed
 operation = block
 ```
 
-表示当前目标无法继续。
-
 ### 错误
 
-监听 DSH Agent loop：
+监听：
 
 ```text
 agent/error
 ```
 
-这里表示 Agent 层面的错误，而不是普通 shell 命令返回非零退出码。
+这里表示 Agent 层面的错误。普通 shell 命令返回非零退出码不一定会产生此事件。
 
-## 声音架构
+## 平台支持
 
-通知使用语义化声音名称：
+### Windows / WSL
+
+使用 DSH Web 时推荐浏览器播放。
+
+后端播放使用：
+
+```text
+PowerShell
+  → System.Media.SoundPlayer
+  → Windows Audio
+```
+
+### Linux
+
+后端播放自动探测：
+
+```text
+paplay
+pw-play
+aplay
+ffplay
+```
+
+插件不会自动安装任何播放器。
+
+## 开发者文档
+
+以下内容主要面向贡献者与插件开发者。
+
+### 官方 DSH 插件形态
+
+dsh-notify-bell 遵循官方 DSH 插件规范。
+
+本包：
+
+- 导出 Schemastery `Config` schema
+- 使用官方 Cordis 插件形态
+- 通过 `dsh.bundle` 声明自己的 bundle patch
+- 通过 `dsh.client` 提供 Web 客户端
+- 使用 `cordis.patch.yml`，无需手动编辑 profile patch
+
+官方 DSH 插件文档：
+
+https://deepseek-harness.github.io/deepseek-harness/develop/basic/
+
+### 架构
+
+```text
+DSH 会话事件
+        ↓
+事件分类
+        ↓
+semantic sound
+        ↓
+playback
+   ┌────┼───────┐
+   ↓    ↓       ↓
+browser backend none
+   ↓      ↓
+  SSE    audio
+   ↓      ├─ WAV
+  Web      └─ BEL fallback
+  Audio
+```
+
+事件层与物理音频后端相互独立。
+
+语义声音：
 
 ```text
 done
@@ -330,63 +425,104 @@ block
 error
 ```
 
-事件层不关心声音具体如何播放。
+### 浏览器后端
 
-当前结构：
+浏览器模式的数据流：
 
 ```text
-semantic sound
-      ↓
-   soundPack
-      ├── wav
-      │    ├── Windows / WSL
-      │    └── Linux
-      │
-      └── bell fallback
+session event
+    ↓
+服务端分类
+    ↓
+SSE: /notify-bell/events
+    ↓
+client.js
+    ↓
+Web Audio
+    ↓
+包内 WAV
 ```
 
-因此未来可以在不修改 DSH 事件处理逻辑的情况下增加新的音频后端。
+浏览器不会重复实现事件分类逻辑。
+
+### 后端音频
+
+后端模式复用现有平台音频抽象：
+
+```text
+Windows / WSL
+→ PowerShell + SoundPlayer
+
+Linux
+→ paplay
+→ pw-play
+→ aplay
+→ ffplay
+
+失败
+→ BEL fallback
+```
+
+### Web 客户端
+
+Web 客户端通过 DSH 客户端模块系统加载，把通知控件注册在 Session log 旁。
+
+通知设置弹层控制：
+
+- `enabled`
+- `playback`
+
+运行时状态原子持久化到 legacy 配置文件。
 
 ## 测试
 
-当前测试：
+项目包含单元测试与会话层集成测试。
 
-**全部通过** — 6 个 node:test 用例（1 个单元脚本内含 171+ 项断言检查 + 5 个会话层集成）。
+当前测试状态：
 
-已经完成真实验证：
+**全部通过 — 11 个 `node:test` 用例（6 个单元 + 5 个会话层集成），单元脚本内含 179 项断言检查。**
+
+已完成真实验证：
 
 - 任务完成
 - 审批请求
 - 用户提问
 - Web UI 静音/开启
+- 浏览器播放
+- 后台标签页浏览器播放
 - WSL → Windows WAV 播放
+- 后端播放
+- 播放方式切换
 
-错误通知路径由自动化测试覆盖，不需要通过故意破坏 API credentials 来验证。
+错误通知路径由自动化测试覆盖，不需要通过故意破坏 credentials 来验证。
 
 ## Developer Preview
 
-DSH 目前仍处于 Developer Preview 阶段，其插件与事件 API 未来可能发生变化。
+DSH 仍处于 Developer Preview 阶段，上游插件与事件 API 可能变化。
 
-本插件不会修改 DSH 核心代码，而是使用当前已有的插件与事件接口。
+dsh-notify-bell 是社区插件，不是 DeepSeek 官方插件。
 
 欢迎社区重点测试：
 
 - Windows 原生
 - WSL
 - Linux 音频播放
+- 浏览器播放
+- 后台标签页播放
 - 审批通知
 - 提问通知
 - 声音音量与长期使用体验
 - 配置兼容性
-- DSH 上游 API 变化
+- DSH 上游变化
 
-提交 Issue 时，请尽可能附上：
+提交 Issue 时，请附上：
 
 - DSH 版本
-- 操作系统 / WSL 环境
-- 触发的通知类型
+- 操作系统/环境
+- 播放方式
+- 触发的通知事件
+- 预期行为
 - 实际行为
-- 日志
 - 重现步骤
 
 ## 致谢

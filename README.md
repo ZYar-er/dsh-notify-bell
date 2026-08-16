@@ -4,9 +4,7 @@
 
 [![npm](https://img.shields.io/npm/v/dsh-notify-bell)](https://www.npmjs.com/package/dsh-notify-bell) [![GitHub Release](https://img.shields.io/github/v/release/ZYar-er/dsh-notify-bell)](https://github.com/ZYar-er/dsh-notify-bell/releases/latest)
 
-A **community plugin** for DeepSeek Harness (DSH) — semantic notification sounds.
-
-Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
+A **community plugin** for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) that provides semantic notification sounds for important agent events.
 
 > **Developer Preview · v0.12.0**
 
@@ -16,80 +14,39 @@ dsh-notify-bell lets you step away from the DSH Web UI without missing important
 
 Instead of notifying on every internal event, it focuses on moments when the agent actually needs your attention:
 
-- ✓ **Complete** — the task finished
-- 🔐 **Approval** — a tool operation needs your approval
-- ❓ **Question** — the agent is waiting for an answer
-- ⚠ **Blocked** — the goal cannot continue
-- ✗ **Error** — the agent encountered an error
+* ✓ **Complete** — the agent finished its final answer
+* 🔐 **Approval** — a tool operation needs your approval
+* ❓ **Question** — the agent is waiting for an answer
+* ⚠ **Blocked** — the goal cannot continue
+* ✗ **Error** — the agent encountered an agent-level error
 
-Each event uses a distinct semantic sound rather than encoding meaning by counting beeps.
+Each event has its own semantic sound rather than relying on repeated beeps to communicate meaning.
 
 ## Features
 
-- Semantic notifications for complete, approval, question, block, and error events
-- Official Cordis plugin form: exported `Config` schema (fail-loud validation) + `dsh.bundle` patch
-- WAV sound pack
-- BEL fallback
-- Native Windows audio support
-- WSL → Windows audio support
-- Native Linux audio support
-- Runtime mute/unmute from the DSH Web UI
-- Light/dark theme support
-- Phosphor `bell` / `bell-slash` notification button
-- Configurable event sounds
-- Configurable minimum duration for completion notifications
-- Automatic fallback when audio playback is unavailable
-- No runtime dependencies beyond the official `@deepseek-ai/schemastery`
-
-## Platform Support
-
-### Windows / WSL
-
-On Windows and WSL, WAV playback uses:
-
-```text
-PowerShell
-  → System.Media.SoundPlayer
-  → Windows Audio
-```
-
-WSL paths are converted automatically with `wslpath`.
-
-### Linux
-
-The plugin automatically probes available audio players in this order:
-
-```text
-paplay
-pw-play
-aplay
-ffplay
-```
-
-No additional player is installed by the plugin.
-
-### Fallback
-
-When WAV playback is unavailable, the plugin falls back to the terminal BEL (`\a`) when a TTY is available.
-
-Audio playback failures never crash DSH.
+* Semantic notifications for complete, approval, question, block, and error events
+* Browser playback in DSH Web
+* Host-side playback on Windows, WSL, and Linux
+* One-click mute/unmute from the DSH Web UI
+* Playback selector: **Browser / Backend / None**
+* Light/dark theme support
+* Phosphor `bell` / `bell-slash` notification button
+* WAV sound pack
+* BEL fallback for backend playback
+* Configurable notification sounds
+* Configurable minimum duration for completion notifications
+* Official DSH Cordis plugin format with schema validation
+* No runtime dependencies beyond the official `@deepseek-ai/schemastery`
 
 ## Installation
 
-Published on **npm** as `dsh-notify-bell`. The plugin follows the official
-DSH plugin format (see the
-[plugin tutorials](https://deepseek-harness.github.io/deepseek-harness/develop/basic/)):
-it is a Cordis bundle that declares its own `cordis.patch.yml` via
-`dsh.bundle`, exports a `Config` schema, and installs with the official
-CLI:
+Install from npm:
 
 ```bash
 dsh plugin --profile web add dsh-notify-bell
 ```
 
-`dsh plugin add` installs the package and appends it to the profile's
-`dsh.profile.bundles`, so the bundle layer is applied automatically on the
-next boot. No manual patch editing is required.
+After installation, restart `dsh web` if required by your current DSH setup.
 
 ### From source / GitHub
 
@@ -99,48 +56,155 @@ From a checkout of this repository:
 dsh plugin --profile web add ./dsh-notify-bell
 ```
 
-Or install straight from GitHub (sources only, so pin a commit for
-supply-chain safety):
+For development versions or source testing, install straight from GitHub:
 
 ```bash
 dsh plugin --profile web add github:zyar-er/dsh-notify-bell#<commit-sha>
 ```
 
+Pinning a commit is recommended when installing directly from GitHub.
+
+## Quick Start
+
+After starting DSH Web, a notification bell appears next to **Session log**:
+
+```text
+Session log   🔔
+```
+
+Click the bell to open notification settings.
+
+![Notification settings popover](./sound-showcase/assets/settings-menu-en.png)
+
+You can control:
+
+* **Notifications** — enable or disable all notification sounds
+* **Playback** — choose where sounds are played:
+
+  * **Browser**
+  * **Backend**
+  * **None**
+
+Changes apply immediately and are persisted automatically.
+
+## Playback Modes
+
+### Browser
+
+Recommended for DSH Web.
+
+The backend classifies notification events and sends semantic sound events to the browser over SSE. The browser plays the bundled WAV files using Web Audio.
+
+```text
+DSH backend
+   ↓
+SSE
+   ↓
+DSH Web
+   ↓
+Web Audio
+   ↓
+WAV
+```
+
+Browser playback requires normal user interaction with the page before the first sound because of browser autoplay policies.
+
+Once unlocked, the DSH tab can remain in the background while you work in another tab.
+
+Browser playback does **not** use the browser Notification API and does not require notification permissions.
+
+### Backend
+
+Playback happens on the host instead of inside the browser.
+
+On Windows and WSL:
+
+```text
+PowerShell
+  → System.Media.SoundPlayer
+  → Windows Audio
+```
+
+On Linux, the plugin probes available players in this order:
+
+```text
+paplay
+pw-play
+aplay
+ffplay
+```
+
+If WAV playback is unavailable, backend playback can fall back to the terminal BEL when a TTY is available.
+
+### None
+
+Notifications are logged but no sound is played.
+
+### Selecting a playback mode
+
+The playback mode can be changed from the notification settings popover without restarting DSH.
+
+Configuration:
+
+```json
+{
+  "playback": "browser"
+}
+```
+
+Allowed values:
+
+```text
+browser
+backend
+none
+```
+
+There is currently no automatic Browser → Backend fallback and no `both` mode. The selected mode is intentional: one notification is handled by one playback backend.
+
+## Notification Sounds
+
+| Event       | Sound                       | Source       | Duration |
+| ----------- | --------------------------- | ------------ | -------: |
+| ✓ Complete  | `ui/success_bling`          | react-sounds |    0.76s |
+| 🔐 Approval | `notification/notification` | react-sounds |    0.86s |
+| ❓ Question  | `notification/info`         | react-sounds |    0.86s |
+| ⚠ Blocked   | `ui/blocked`                | react-sounds |    0.89s |
+| ✗ Error     | `notification/error`        | react-sounds |    0.55s |
+
+🎧 **[Listen to all sounds](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
+
+Each notification uses a distinct sound identity rather than counting repeated beeps.
+
 ## Configuration
 
-The plugin exports a Schemastery `Config` schema: Cordis validates the
-`config` of the plugin row and fills defaults at load time, and invalid
-values fail loudly instead of being silently ignored.
+The plugin follows the official DSH Cordis configuration model and exports
+a Schemastery `Config` schema: the `config` block of the plugin row in your
+profile's `cordis.patch.yml` is validated and default-filled at load time,
+and invalid values fail loudly.
 
-### Via the profile patch (recommended)
-
-Add a `config` block to the plugin row in your profile's
-`cordis.patch.yml` (or your own `--patch` overlay):
+Example (profile patch):
 
 ```yaml
 - id: notify-bell
   config:
     minDuration: 10
-    soundPack: wav
-    events:
-      complete:
-        sound: done
-      block:
-        sound: block
+    playback: backend
 ```
 
-### Via the legacy config file
-
-The plugin also reads `~/.config/dsh/notify-bell.json` (override with the
-`DSH_NOTIFY_BELL_CONFIG` environment variable). This file is the
-runtime-state layer: the Web UI bell toggle persists `enabled` here, and
-it keeps older deployments working. Merge priority is:
+The legacy runtime-state file is:
 
 ```text
-explicit cordis.yml config  >  notify-bell.json  >  schema defaults
+~/.config/dsh/notify-bell.json
 ```
 
-Example file:
+Its path can be overridden with:
+
+```text
+DSH_NOTIFY_BELL_CONFIG
+```
+
+The Web UI persists `enabled` and `playback` there. Example file:
 
 ```json
 {
@@ -184,77 +248,43 @@ Example file:
 }
 ```
 
-### Playback location
-
-`playback` chooses where the notification sound is played
-(`soundPack` only affects `playback: backend`; the browser always plays
-the package's bundled WAV files). The default is `browser`; you can
-also change it at runtime from the bell popover in the DSH Web UI (no
-restart needed):
-
-- `browser`: the backend classifies events and writes logs, but plays
-  nothing locally. It pushes the semantic sound over Server-Sent
-  Events (`GET /notify-bell/events`), and the DSH Web UI plays the
-  matching WAV (`/notify-bell/sounds/*.wav`, served from the package's
-  `sound-showcase/sounds`). One sound per notification.
-- `backend`: the host plays the sound (BEL or WAV via `soundPack`);
-  the browser stays silent.
-- `none`: logs only — nothing is pushed to the browser and no local
-  audio is played.
-
-Browser notes:
-
-- The browser uses Web Audio; autoplay policy requires one user
-  gesture (`pointerdown`/`keydown`) before the first sound. Until then
-  playback is silently refused and a locked state is recorded in the
-  console (`console.debug`), never thrown.
-- No `both`, no backend fallback, no multi-tab coordination yet.
-- `enabled=false` still silences everything: the backend pushes
-  nothing and the browser plays nothing. `enabled` and `playback` are
-  independent settings.
-
 ### Completion threshold
 
-Tasks shorter than `minDuration` do not play a completion sound.
+Tasks shorter than `minDuration` do not play the completion sound.
 
 Approval and question notifications are immediate because they indicate that the agent is waiting for the user.
 
 ### Runtime mute
 
-The notification button in the DSH Web UI can enable or disable notifications instantly.
+`enabled` controls all notification playback.
 
 When disabled:
 
-- all notification sounds are muted
-- DSH itself continues running normally
-- the current configuration is preserved
-- no restart is required
+* no browser sound is sent
+* no backend sound is played
+* DSH continues running normally
+* other configuration is preserved
+* no restart is required
 
-## Web UI
+### Configuration sources
 
-A notification button (bell) is added next to **Session log**:
+The plugin follows the official DSH Cordis configuration model.
+
+Explicit plugin configuration takes precedence over the legacy runtime-state file:
 
 ```text
-Session log   🔔
+cordis config  >  notify-bell.json  >  schema defaults
 ```
 
-Clicking the bell opens a compact notification settings popover:
+For normal users, the Web UI is the easiest way to change notification state and playback mode.
 
-- **Notifications**: an On/Off switch (enabled = `bell` icon, disabled =
-  `bell-slash`).
-- **Playback**: a radio group with Browser (play in the browser) /
-  Backend (play on the host) / None (logs only).
-
-Changes apply immediately and are persisted to
-`~/.config/dsh/notify-bell.json` — no DSH restart needed. The icon and
-popover follow the current light/dark theme.
-
-## Event Details
+## Event Behavior
 
 ### Complete
 
-Triggered when the agent finishes its final answer to a user request — the
-durable session event that the DSH Web UI itself uses to close a turn:
+A completion notification means that the agent has finished its final answer for the current turn.
+
+The notification is based on:
 
 ```text
 session/event
@@ -262,47 +292,45 @@ type = turn/end
 data.reason.kind = completed
 ```
 
-Only main sessions notify (subagent turns with `delegationDepth >= 1` are
-ignored), and the turn must actually produce a final assistant text answer:
-the last `assistant/message` must contain a non-empty `text` block and no
-`tool/call` may follow it. Empty no-op turns (a queued message cleared before
-it was claimed) and tool-call-only/concludes-turn endings are silently ignored.
-`goal/changed` with `operation = complete` no longer plays a sound.
+The turn must contain a real final assistant text response. Empty no-op turns and tool-call-only `concludesTurn` endings do not trigger the completion sound.
 
-The duration is `turn/end.time - turn/start.time`; requests shorter than
-`minDuration` are logged but do not play a sound. If the plugin loads mid-turn
-but still observes the final `assistant/message`, the completion is logged
-without a sound; if it loads only after that final answer, the turn stays
-silent because the final-answer condition cannot be verified.
+Subagent turns are ignored.
+
+Completion duration is measured from:
+
+```text
+turn/start.time → turn/end.time
+```
+
+Requests shorter than `minDuration` are logged but do not play the completion sound.
 
 ### Approval
 
-Triggered by the durable:
+Triggered by:
 
 ```text
 approval/asked
 ```
 
-This represents a tool operation waiting for user approval.
+This means a tool operation is waiting for user approval.
 
-`approval/decided` does not generate another notification.
+`approval/decided` does not produce another notification.
 
 ### Question
 
-Triggered by the durable session event:
+Triggered when the agent invokes:
 
 ```text
-tool/call
-name = ask_user_question
+ask_user_question
 ```
 
-This represents the agent explicitly asking the user a question.
+The notification indicates that the agent is waiting for a user response.
 
-The response does not generate another notification.
+The response itself does not create another notification.
 
-### Block
+### Blocked
 
-Triggered when a goal enters:
+Triggered by:
 
 ```text
 goal/changed
@@ -311,17 +339,84 @@ operation = block
 
 ### Error
 
-Triggered by the DSH agent loop's:
+Triggered by:
 
 ```text
 agent/error
 ```
 
-This represents an agent-level error, not an ordinary command returning a non-zero exit code.
+This represents an agent-level error. A normal shell command returning a non-zero exit code does not necessarily produce this event.
 
-## Sound Architecture
+## Platform Support
 
-Notifications are represented by semantic sound names:
+### Windows / WSL
+
+Browser playback is recommended when using DSH Web.
+
+Backend playback uses:
+
+```text
+PowerShell
+  → System.Media.SoundPlayer
+  → Windows Audio
+```
+
+### Linux
+
+Backend playback automatically probes:
+
+```text
+paplay
+pw-play
+aplay
+ffplay
+```
+
+No additional player is installed automatically.
+
+## Developer Documentation
+
+The following sections are primarily for contributors and plugin developers.
+
+### Official DSH Plugin Format
+
+dsh-notify-bell follows the official DSH plugin format.
+
+The package:
+
+* exports a Schemastery `Config` schema
+* uses the official Cordis plugin form
+* declares its bundle patch through `dsh.bundle`
+* provides the Web client through `dsh.client`
+* uses `cordis.patch.yml` without requiring manual profile patch editing
+
+The official DSH plugin documentation is available at:
+
+https://deepseek-harness.github.io/deepseek-harness/develop/basic/
+
+### Architecture
+
+```text
+DSH session events
+        ↓
+event classification
+        ↓
+semantic sound
+        ↓
+playback
+   ┌────┼───────┐
+   ↓    ↓       ↓
+browser backend none
+   ↓      ↓
+ SSE    audio
+   ↓      ├─ WAV
+ Web      └─ BEL fallback
+ Audio
+```
+
+The event layer is independent from the physical audio backend.
+
+Semantic sounds are:
 
 ```text
 done
@@ -331,57 +426,105 @@ block
 error
 ```
 
-The event layer does not know how a sound is physically played.
+### Browser Backend
 
-Current backends:
+Browser mode uses:
 
 ```text
-semantic sound
-      ↓
-   soundPack
-      ├── wav
-      │    ├── Windows / WSL
-      │    └── Linux
-      │
-      └── bell fallback
+session event
+    ↓
+server-side classification
+    ↓
+SSE: /notify-bell/events
+    ↓
+client.js
+    ↓
+Web Audio
+    ↓
+bundled WAV
 ```
 
-This makes it possible to add other backends later without changing the DSH event handling.
+The browser does not duplicate the event classification logic.
+
+### Backend Audio
+
+Backend mode uses the existing platform audio abstraction:
+
+```text
+Windows / WSL
+→ PowerShell + SoundPlayer
+
+Linux
+→ paplay
+→ pw-play
+→ aplay
+→ ffplay
+
+failure
+→ BEL fallback
+```
+
+### Web Client
+
+The Web client is loaded using the DSH client module system and registers the notification controls next to Session log.
+
+The notification settings popover controls:
+
+* `enabled`
+* `playback`
+
+Runtime state is persisted atomically to the legacy configuration file.
 
 ## Testing
 
-Current test suite:
+The project includes unit and session-layer integration tests.
 
-**All tests passing** — 6 node:test cases (1 unit script with 171+ assertion checks inside + 5 session-layer integration).
+Current test status:
 
-Real-world verification has been completed for:
+**All tests passing — 11 `node:test` cases (6 unit + 5 session-layer integration), with 179 assertion checks in the unit script.**
 
-- task completion
-- approval requests
-- user questions
-- Web UI mute/unmute
-- WSL → Windows WAV playback
+Real-world verification has covered:
 
-The error notification path is covered by tests; deliberately breaking credentials is not required for normal validation.
+* task completion
+* approval requests
+* user questions
+* Web UI mute/unmute
+* Browser playback
+* background-tab Browser playback
+* WSL → Windows WAV playback
+* backend playback
+* playback mode switching
+
+The error notification path is covered by automated tests; deliberately breaking credentials is not required for normal validation.
 
 ## Developer Preview
 
-DSH is still in developer preview, so its plugin and event APIs may change.
+DSH is still in Developer Preview, so upstream plugin and event APIs may change.
 
-This plugin intentionally avoids modifying the DSH core and relies on currently available plugin/event interfaces.
+dsh-notify-bell is a community plugin and is not an official DeepSeek plugin.
 
 Community testing is especially welcome for:
 
-- Windows native
-- WSL
-- Linux audio playback
-- approval notifications
-- question notifications
-- sound loudness and comfort
-- configuration compatibility
-- DSH upstream changes
+* Windows native
+* WSL
+* Linux audio playback
+* Browser playback
+* background-tab playback
+* approval notifications
+* question notifications
+* sound loudness and long-term comfort
+* configuration compatibility
+* DSH upstream changes
 
-Please include your DSH version, OS/environment, relevant event, and reproduction steps when reporting an issue.
+When reporting an issue, please include:
+
+* DSH version
+* operating system/environment
+* playback mode
+* notification event
+* expected behavior
+* actual behavior
+* reproduction steps
 
 ## Credits
 
