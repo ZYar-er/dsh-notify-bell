@@ -9,8 +9,9 @@
  *   3. 内置默认值（schema 默认 == DEFAULT_CONFIG）。
  *
  * 文件不存在时使用内置默认值；JSON 非法时打印 warning 并回退默认值；
- * 字段级类型校验，非法字段静默回退默认值。零第三方运行时依赖
- * （node:fs / node:os / node:path；schema 使用 DSH 自带的 @deepseek-ai/schemastery）。
+ * 字段级类型校验，非法字段静默回退默认值。运行时依赖仅
+ * @deepseek-ai/schemastery（DSH 自带的 Config schema 实现）+ node 内置
+ * （node:fs / node:os / node:path）。
  *
  * 事件层只暴露语义化 sound（done / block / permission / error / question）；
  * "响几声/什么节奏/播什么文件"由 backend 内部决定（bell.js / wav.js）。

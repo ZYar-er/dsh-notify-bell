@@ -8,7 +8,7 @@
 
 为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
 
-> **Developer Preview · v0.11.2**
+> **Developer Preview · v0.12.0**
 
 🎧 **[试听通知声音 →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
@@ -186,7 +186,8 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
 
 ### 播放位置
 
-`playback` 决定通知声音在哪里播放（`soundPack` 仍是声音素材来源）。
+`playback` 决定通知声音在哪里播放（`soundPack` 只影响
+`playback: backend`；浏览器始终播放包内自带的 WAV 素材）。
 默认 `browser`；也可以直接在 DSH Web 界面点右上角铃铛，在设置弹层里
 实时切换（无需重启）：
 
@@ -350,7 +351,7 @@ semantic sound
 
 当前测试：
 
-**全部通过** — 11/11 个 node:test 用例（6 个单元 + 5 个会话层集成）。
+**全部通过** — 6 个 node:test 用例（1 个单元脚本内含 171+ 项断言检查 + 5 个会话层集成）。
 
 已经完成真实验证：
 

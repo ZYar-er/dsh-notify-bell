@@ -86,13 +86,16 @@ window.__ModuleLoader__.load({
 
 		/** 把 (enabled, error) 映射为按钮视图（图标/文案/title/aria）。
 		 * 按钮现在打开通知设置 popover（不再是直接 toggle）；图标只代表
-		 * enabled 状态（bell / bell-slash），与 playback 无关。 */
-		function bellView(enabled, error) {
+		 * enabled 状态（bell / bell-slash），与 playback 无关。
+		 * @param t - 可选翻译函数（官方 locale seat）；缺失时英文 fallback。 */
+		function bellView(enabled, error, t) {
 			var on = enabled === true;
+			var label = typeof t === "function" ? t("notifications") : "Notification settings";
+			var title = typeof t === "function" ? (error ? t("failed") : t("notifications")) : (error ? "Failed to update notifications setting" : "Notification settings");
 			return {
 				icon: on ? "bell" : "bell-slash",
-				label: "Notification settings",
-				title: error ? "Failed to update notifications setting" : "Notification settings",
+				label: label,
+				title: title,
 				pressed: on,
 				ready: enabled !== null
 			};
@@ -201,16 +204,28 @@ window.__ModuleLoader__.load({
 			);
 			var tr = typeof props.t === "function" ? props.t : function (key) { return SETTINGS_I18N[lang][key]; };
 
-			// 初始加载：GET 一次拿 enabled + playback（不假设任何默认值）。
-			react.useEffect(function () {
+			/** 拉取后端运行时状态（enabled + playback）；失败置 error 供重试。 */
+			var refresh = react.useCallback(function () {
 				bellRpc("getEnabled")
 					.then(function (r) {
 						if (r && r.ok) setState(function (s) { return { enabled: r.value.enabled, playback: r.value.playback, error: false, open: s.open }; });
+						else setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: true, open: s.open }; });
 					})
 					.catch(function () {
 						setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: true, open: s.open }; });
 					});
 			}, []);
+
+			// 初始加载：GET 一次拿 enabled + playback（不假设任何默认值）。
+			react.useEffect(function () {
+				refresh();
+			}, [refresh]);
+
+			// 打开 popover 时若后端状态尚未加载成功（初始 GET 失败）→ 重试；
+			// 避免按钮永久 disabled 且无恢复入口。
+			react.useEffect(function () {
+				if (current.open && (current.enabled === null || typeof current.playback !== "string")) refresh();
+			}, [current.open, current.enabled, current.playback, refresh]);
 
 			// popover 打开时：document 级外部点击 / Escape 关闭（关闭即移除监听）。
 			react.useEffect(function () {
@@ -233,12 +248,21 @@ window.__ModuleLoader__.load({
 				};
 			}, [current.open]);
 
-			/** 轻量错误提示：popover 内 error 文案，3 秒后自动恢复。 */
+			/** 轻量错误提示：popover 内 error 文案，3 秒后自动恢复。
+			 *  timer 存入 ref，组件卸载时清理（不悬挂 setTimeout）。 */
+			var errorTimer = react.useRef(null);
 			var flagError = function () {
-				setTimeout(function () {
+				if (errorTimer.current !== null) clearTimeout(errorTimer.current);
+				errorTimer.current = setTimeout(function () {
+					errorTimer.current = null;
 					setState(function (s) { return s.error ? { enabled: s.enabled, playback: s.playback, error: false, open: s.open } : s; });
 				}, 3000);
 			};
+			react.useEffect(function () {
+				return function () {
+					if (errorTimer.current !== null) clearTimeout(errorTimer.current);
+				};
+			}, []);
 
 			var setEnabledOpt = function (next) {
 				var before = current.enabled;
@@ -281,7 +305,7 @@ window.__ModuleLoader__.load({
 			var playbackTitle = tr("playback");
 			var switchLabel = enabledOn ? tr("on") : tr("off");
 			var errorText = current.error ? tr("failed") : "";
-			var bell = bellView(current.enabled, current.error);
+			var bell = bellView(current.enabled, current.error, tr);
 			var bellIcon = enabledOn ? "bell" : "bell-slash";
 
 			return react.createElement(
@@ -371,8 +395,10 @@ window.__ModuleLoader__.load({
 			permission: "/notify-bell/sounds/permission.wav",
 			question: "/notify-bell/sounds/question.wav",
 			block: "/notify-bell/sounds/block.wav",
-			error: "/notify-bell/sounds/error.wav"
+			error: "/notify-bell/sounds/error.wav",
+			default: "/notify-bell/sounds/done.wav"
 		};
+		exports.SOUND_URLS = SOUND_URLS;
 
 		/** 创建播放器：懒建 AudioContext、buffer 缓存、locked 诊断状态。 */
 		function createPlayer() {
@@ -543,11 +569,15 @@ window.__ModuleLoader__.load({
 		 * @param ctx - 客户端根上下文。
 		 */
 		function apply(ctx) {
-			// DSH 官方 locale 字典注册（zh/en 与 SETTINGS_I18N 同源）；
+			// DSH 官方 locale 字典注册（zh/en 与 SETTINGS_I18N 同源）。
+			// 必须放进 ctx.effect：返回的 disposer 随 fiber 卸载时移除
+			// namespace，否则客户端 HMR 重载后二次 register 会抛
+			// "locale namespace ... already has locale"（locale 服务跨 reload 存活）。
 			// locale 未安装时跳过，组件 fallback 到 html lang 检测。
-			if (ctx.locale && typeof ctx.locale.register === "function") {
-				ctx.locale.register("notify-bell", SETTINGS_I18N);
-			}
+			ctx.effect(function () {
+				if (!ctx.locale || typeof ctx.locale.register !== "function") return;
+				return ctx.locale.register("notify-bell", SETTINGS_I18N);
+			}, "dsh-notify-bell: locale");
 
 			ctx.effect(function () {
 				var style = document.createElement("style");

@@ -1364,7 +1364,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 		}
 	};
 	loaded.apply(mockCtx);
-	check(effects.length === 3, 'Y11 three effects (styles + browser audio + bell entry)', effects.length);
+	check(effects.length === 4, 'Y11 four effects (styles + locale + browser audio + bell entry)', effects.length);
 	check(injectedName === 'conversation.session.header.utilities', 'Y11 slot name', injectedName);
 	check(regOpts?.id === 'notify-bell-toggle' && regOpts?.name === 'conversation.session.header.utilities' && regOpts?.order === 90, 'Y11 register opts', regOpts);
 	check(regOpts?.locale === 'notify-bell', 'Y11 locale seat declared', regOpts?.locale);
@@ -1453,6 +1453,26 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const keys = ['notifications', 'on', 'off', 'playback', 'browser', 'backend', 'none', 'failed'];
 	check(keys.every((k) => typeof SETTINGS_I18N.en?.[k] === 'string' && typeof SETTINGS_I18N.zh?.[k] === 'string'), 'U8 i18n keys complete', Object.keys(SETTINGS_I18N.en ?? {}).join(','));
 	report('U8: 中英文案 ✓');
+
+	// U9: 双实现对齐 —— client bundle 内联 SOUND_URLS 与参考实现逐键一致
+	const { SOUND_URLS: clientSoundUrls } = loaded;
+	let aligned = true;
+	const refKeys = Object.keys(SOUND_URLS).sort();
+	const clientKeys = Object.keys(clientSoundUrls ?? {}).sort();
+	if (refKeys.join(',') !== clientKeys.join(',')) aligned = false;
+	for (const key of refKeys) if (clientSoundUrls?.[key] !== SOUND_URLS[key]) aligned = false;
+	check(aligned, 'U9 client bundle SOUND_URLS aligned with reference', clientKeys.join(','), refKeys.join(','));
+	report('U9: 双实现 SOUND_URLS 对齐 ✓');
+
+	// Y9b: bellView 翻译（官方 locale t 函数）
+	const zhT = (key) => SETTINGS_I18N.zh[key];
+	const onZh = bellView(true, false, zhT);
+	check(onZh.label === '通知' && onZh.title === '通知', 'Y9b zh label', onZh);
+	const errZh = bellView(true, true, zhT);
+	check(errZh.title === '设置更新失败', 'Y9b zh error title', errZh);
+	const onEn = bellView(true);
+	check(onEn.label === 'Notification settings', 'Y9b en fallback', onEn);
+	report('Y9b: bellView 翻译 ✓');
 
 	delete globalThis.window;
 	delete globalThis.document;
@@ -2599,6 +2619,38 @@ class FakeRes extends EventEmitter {
 	report('E6: 广播写失败不抛 ✓');
 }
 
+// E7: 连接数归零后心跳自动停止（不空转）
+{
+	const hub = createSseHub({ heartbeatMs: 10 });
+	const res = new FakeRes();
+	hub.attach({}, res, {});
+	hub.start();
+	await sleep(30);
+	check(res.text.includes(': hb'), 'E7 heartbeat running with connection', res.text.slice(0, 80));
+	res.closeNow();
+	await sleep(30);
+	const afterClose = res.text;
+	await sleep(40);
+	check(res.text === afterClose, 'E7 heartbeat stopped when idle', res.text.length - afterClose.length);
+	hub.dispose();
+	report('E7: 连接归零 → 心跳停表 ✓');
+}
+
+// E8: 连接数上限（maxConnections）→ 超限拒绝 503
+{
+	const hub = createSseHub({ maxConnections: 2 });
+	const a = new FakeRes();
+	const b = new FakeRes();
+	const c = new FakeRes();
+	hub.attach({}, a, {});
+	hub.attach({}, b, {});
+	hub.attach({}, c, {});
+	check(hub.connectionCount === 2, 'E8 cap enforced', hub.connectionCount);
+	check(c.status === 503 && c.ended && !c.text.includes('event: ready'), 'E8 rejected with 503', c.status, c.text.slice(0, 60));
+	hub.dispose();
+	report('E8: SSE 连接上限 ✓');
+}
+
 // ---------- F: 完整链路（index.js playback=browser：后端分类 → SSE → 不本地播放） ----------
 {
 	const s = setupWithWeb({ enabled: true, playback: 'browser', soundPack: 'default', bell: { gapMs: GAP, permissionGapMs: GAP } });
@@ -2751,18 +2803,19 @@ const makeFakeFetch = () => {
 	report('G3: done → done.wav 播放（含缓存）✓');
 }
 
-// G4: semantic sound 映射表完整（5 个 → /notify-bell/sounds/*.wav）
+// G4: semantic sound 映射表完整（6 个含 default → /notify-bell/sounds/*.wav）
 {
 	const expected = {
 		done: '/notify-bell/sounds/done.wav',
 		permission: '/notify-bell/sounds/permission.wav',
 		question: '/notify-bell/sounds/question.wav',
 		block: '/notify-bell/sounds/block.wav',
-		error: '/notify-bell/sounds/error.wav'
+		error: '/notify-bell/sounds/error.wav',
+		default: '/notify-bell/sounds/done.wav'
 	};
 	let ok = true;
 	for (const key of Object.keys(expected)) if (SOUND_URLS[key] !== expected[key]) ok = false;
-	check(ok && Object.keys(SOUND_URLS).length === 5, 'G4 sound url map', SOUND_URLS);
+	check(ok && Object.keys(SOUND_URLS).length === 6, 'G4 sound url map', SOUND_URLS);
 	report('G4: semantic sound → WAV URL 映射 ✓');
 }
 

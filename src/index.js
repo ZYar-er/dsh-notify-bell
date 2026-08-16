@@ -17,11 +17,12 @@
  *   - wav.js     WAV 后端（Windows/WSL/Linux，失败 fallback BEL）
  *   - log.js     日志后端（stdout 输出 + maxLength 截断）
  *
- * 播放位置（playback，实验阶段）：
- *   - "backend"（默认）：通知由本机后端播放（soundPack 决定 BEL/WAV）。
- *   - "browser"：后端仍负责分类/去重/日志，但不做任何本地播放；
+ * 播放位置（playback，运行时可变，Web Popover 可实时切换）：
+ *   - "browser"（默认）：后端仍负责分类/去重/日志，但不做任何本地播放；
  *     只通过 SSE（/notify-bell/events）推送 { sound }，由 DSH Web
  *     客户端的浏览器实际播放（client.js 内联播放器）。
+ *   - "backend"：通知由本机后端播放（soundPack 决定 BEL/WAV）。
+ *   - "none"：只保留日志，不推送也不本地播放。
  *
  * 事件语义（受配置 events.* 控制）：
  *   - complete：turn/end（reason.kind === "completed"，主会话
@@ -224,7 +225,7 @@ export function apply(ctx, config = {}, options = {}) {
 		const soundsDir = fileURLToPath(new URL('../sound-showcase/sounds/', import.meta.url));
 		const soundCache = new Map();
 		const serveSound = async (name, res) => {
-			const safe = /^[a-z0-9-]+\.wav$/.test(name);
+			const safe = /^[a-z0-9-]{1,64}\.wav$/.test(name);
 			if (!safe) return json(res, 404, { ok: false, error: { code: 'not-found', message: `unknown sound ${name}` } });
 			try {
 				let body = soundCache.get(name);

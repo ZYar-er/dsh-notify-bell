@@ -2,17 +2,25 @@
 
 dsh-notify-bell 版本级、面向用户的变化记录。历史条目与对应的 GitHub Release 文案保持一致，不会被后续版本覆盖。
 
-## [Unreleased]
+## [0.12.0] - 2026-08-16
 
 ### Added
 
-- Web Playback Selector：右上角铃铛改为打开通知设置弹层（通知 On/Off 开关 + 播放方式 radio：Browser / Backend / None）。设置实时生效、原子持久化到 `~/.config/dsh/notify-bell.json`（无需重启），后端 config 是唯一事实源。弹层支持外部点击/Escape 关闭、原生 radio 键盘操作、中英文、浅色/深色主题、focus-visible。
+- Web Playback Selector：右上角铃铛改为打开通知设置弹层（通知 On/Off 开关 + 播放方式 radio：Browser / Backend / None）。设置实时生效、原子持久化到 `~/.config/dsh/notify-bell.json`（无需重启），后端 config 是唯一事实源。弹层支持外部点击/Escape 关闭、原生 radio 键盘操作、中英文（DSH 官方 locale 服务）、浅色/深色主题、focus-visible。
 - `playback` 三值语义：`browser`（SSE 推送 → 浏览器 Web Audio 播放）、`backend`（本机 BEL/WAV 播放）、`none`（只日志，两端静默）；默认 `browser`。
 - API：`GET /notify-bell` 返回 `{ enabled, playback }`；新增 `POST /notify-bell/setPlayback`（非法值 400，写失败 500 且运行时不变）；`writePlayback` 原子写。
+- 浏览器声音映射补齐 `default`（→ done.wav，与后端 BEL/WAV 一致）。
+- SSE 加固：连接数归零自动停心跳、连接数上限（默认 8，超限 503）。
 
 ### Changed
 
 - `playback` 从静态配置变为运行时可变状态（与 `enabled` 同级，二者相互独立）。
+- 客户端 locale 字典注册纳入 `ctx.effect` 生命周期（HMR 重载安全）；`dsh.client.inject` 声明 `@deepseek-ai/dsh-client-locale`。
+- `soundPack` 语义澄清：只影响 `playback: backend`；浏览器始终播放包内 WAV。
+
+### Migration
+
+- **默认播放位置变更**：从 v0.11.x 升级后，未显式配置 `playback` 的部署默认变为 `browser`（由 DSH Web 浏览器播放；本机不再出声）。纯终端/无 Web 客户端场景请显式配置 `"playback": "backend"`；只要日志不要声音配置 `"playback": "none"`。也可在 Web 弹层里随时切换。
 
 ## [0.11.2] - 2026-08-16
 

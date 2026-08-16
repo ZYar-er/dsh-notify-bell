@@ -8,7 +8,7 @@ A **community plugin** for DeepSeek Harness (DSH) — semantic notification soun
 
 Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
-> **Developer Preview · v0.11.2**
+> **Developer Preview · v0.12.0**
 
 🎧 **[Listen to the notification sounds →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
@@ -187,9 +187,10 @@ Example file:
 ### Playback location
 
 `playback` chooses where the notification sound is played
-(`soundPack` stays the sound-material source). The default is
-`browser`; you can also change it at runtime from the bell popover in
-the DSH Web UI (no restart needed):
+(`soundPack` only affects `playback: backend`; the browser always plays
+the package's bundled WAV files). The default is `browser`; you can
+also change it at runtime from the bell popover in the DSH Web UI (no
+restart needed):
 
 - `browser`: the backend classifies events and writes logs, but plays
   nothing locally. It pushes the semantic sound over Server-Sent
@@ -351,7 +352,7 @@ This makes it possible to add other backends later without changing the DSH even
 
 Current test suite:
 
-**All tests passing** — 11/11 node:test cases (6 unit + 5 session-layer integration).
+**All tests passing** — 6 node:test cases (1 unit script with 171+ assertion checks inside + 5 session-layer integration).
 
 Real-world verification has been completed for:
 

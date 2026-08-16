@@ -19,13 +19,15 @@
  * 浏览器自己能否播放）。
  */
 
-/** semantic sound → 静态 WAV URL（后端 /notify-bell/sounds 提供）。 */
+/** semantic sound → 静态 WAV URL（后端 /notify-bell/sounds 提供）。
+ *  包含 'default'（与后端 BEL/WAV 一致：default → done）。 */
 export const SOUND_URLS = Object.freeze({
 	done: '/notify-bell/sounds/done.wav',
 	permission: '/notify-bell/sounds/permission.wav',
 	question: '/notify-bell/sounds/question.wav',
 	block: '/notify-bell/sounds/block.wav',
-	error: '/notify-bell/sounds/error.wav'
+	error: '/notify-bell/sounds/error.wav',
+	default: '/notify-bell/sounds/done.wav'
 });
 
 /** 浏览器 unlock 监听的事件类型（保持最小集合，unlock 成功后移除）。 */
