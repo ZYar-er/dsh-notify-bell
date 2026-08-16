@@ -2,7 +2,7 @@
   "name": "dsh-notify-bell",
   "version": "0.12.0",
   "license": "MIT",
-  "description": "DSH notification plugin with semantic sounds (done/block/permission/question/error): final assistant answer, approval/asked, ask_user_question, goal block, and agent/error notify. Playback selector (browser SSE+Web Audio / backend BEL/WAV / none) in a Web bell popover with runtime config API. Official Cordis plugin form: Config schema, bundle patch (dsh.bundle). Configurable via cordis.yml or the legacy ~/.config/dsh/notify-bell.json (bellCount still accepted).",
+  "description": "Semantic notification sounds for DeepSeek Harness: complete/approval/question/block/error via BEL or WAV, with Web UI bell toggle ｜ DeepSeek Harness 语义化通知声音：完成/审批/提问/受阻/错误，经 BEL 或 WAV 播放，带 Web 铃铛开关",
   "type": "module",
   "main": "src/index.js",
   "exports": {
