@@ -76,18 +76,21 @@
 
 英文主文档。
 
-定位：
+定位（当前章节结构）：
+
 - 项目介绍
-- 核心能力
-- 快速安装
-- 配置
-- 平台支持
-- 通知语义
-- 声音说明
-- 开发者预览状态
-- 测试状态
-- 贡献/反馈
-- 第三方 attribution
+- Features（特性）
+- Installation（安装）
+- Quick Start（快速开始，含设置弹层截图）
+- Playback Modes（播放方式：Browser / Backend / None）
+- Notification Sounds（通知声音表：react-sounds 素材映射 + 时长）
+- Configuration（配置：cordis patch 示例 + legacy 文件示例）
+- Event Behavior（事件行为）
+- Platform Support（平台支持）
+- Developer Documentation（开发者文档：插件形态 / 架构 / 浏览器后端 / 后端音频 / Web 客户端）
+- Testing（测试状态）
+- Developer Preview
+- Credits / License（第三方 attribution）
 
 README.md 是 GitHub 首页的主要入口。
 
@@ -328,6 +331,10 @@ block      → ui/blocked
 error      → notification/error
 ```
 
+browser playback（`playback: browser`）播放同一套包内 WAV 素材
+（`sound-showcase/sounds`，由 `GET /notify-bell/sounds/<name>.wav` 服务），
+映射同样含 `default` → `done.wav`。
+
 不要自行更换声音。
 
 如果声音发生变化：
@@ -346,7 +353,7 @@ error      → notification/error
 当前配置来源（按优先级）：
 
 1. Cordis 配置（profile 的 `cordis.patch.yml` 插件行 `config`，经 `Config` schema 校验，非法值加载即失败）
-2. legacy 文件 `~/.config/dsh/notify-bell.json`（可用 `DSH_NOTIFY_BELL_CONFIG` 环境变量覆盖路径；Web 开关的 `enabled` 运行时状态也持久化在这里）
+2. legacy 文件 `~/.config/dsh/notify-bell.json`（可用 `DSH_NOTIFY_BELL_CONFIG` 环境变量覆盖路径；Web 弹层的 `enabled` 与 `playback` 运行时状态都持久化在这里）
 3. 内置默认值（schema 默认 == DEFAULT_CONFIG）
 
 文档必须始终反映当前 schema。
@@ -358,7 +365,8 @@ error      → notification/error
 * objective.maxLength
 * events.*
 * sound
-* soundPack
+* soundPack（只影响 `playback: backend`：'default' → BEL；'wav' → 本地音频）
+* playback（'browser' | 'backend' | 'none'，默认 'browser'；运行时可变）
 * wav.directory
 * wav.fallback
 * bell
@@ -419,28 +427,34 @@ ffplay
 
 # 九、Web UI 文档
 
-当前 Web UI：
+当前 Web UI（v0.12.0+）：
 
-Session log 旁：
+Session log 旁的铃铛按钮（`bell` / `bell-slash` 图标反映 `enabled` 状态）
+点击后打开**通知设置弹层**：
 
-```text
-bell
-bell-slash
-```
+- 通知 On/Off 开关（`enabled`）
+- 播放方式 radio：Browser（浏览器播放）/ Backend（本机播放）/ None（只日志）
+- 变更实时生效，原子持久化到 legacy 配置文件，无需重启
+- 外部点击 / Escape 关闭；原生 radio 键盘操作
+- 文案走 DSH 官方 locale 服务（中英文）；浅色/深色主题
 
-用途：
-
-**全局通知声音开关**
-
-不是：
+铃铛图标只表示 `enabled`，不表示 `playback`。它不是：
 
 * DSH agent 状态
 * 浏览器 Notification
 * session log 开关
 
-点击后运行时立即生效，无需重启。
+相关后端 API：`GET /notify-bell`（返回 `{ enabled, playback, version }`）、
+`POST /notify-bell/setEnabled` / `setPlayback` / `toggle`、
+SSE `GET /notify-bell/events`（ready 帧 + notify 帧）、
+`GET /notify-bell/sounds/<name>.wav`。
 
 文档必须保持这一描述。
+
+弹层截图存放在 `sound-showcase/assets/settings-menu-en.png` 与
+`settings-menu-zh.png`，分别嵌入 README.md / README.zh.md 的 Quick Start
+章节；弹层 UI 变化后必须重新截图并同步两份 README（截图随包发布，
+因为 sound-showcase 在 npm files 白名单内）。
 
 ---
 

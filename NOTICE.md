@@ -10,9 +10,13 @@ The notification sound assets bundled with dsh-notify-bell
 package) are derived from
 [react-sounds](https://github.com/e3ntity/react-sounds).
 
-The plugin plays these files from the directory set by the `wav.directory`
-config (default `~/.config/dsh/notify-bell/sounds`); it does not install
-them there automatically — missing files fall back to the terminal BEL.
+With `playback: backend`, the plugin plays these files from the directory
+set by the `wav.directory` config (default
+`~/.config/dsh/notify-bell/sounds`); with the default `playback: browser`,
+the Web UI fetches them directly from the package
+(`GET /notify-bell/sounds/*.wav`). Neither mode installs them into the
+config directory automatically — missing files fall back to the terminal
+BEL.
 
 react-sounds is licensed under the MIT License.
 
