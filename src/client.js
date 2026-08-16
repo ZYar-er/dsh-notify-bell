@@ -46,7 +46,7 @@ window.__ModuleLoader__.load({
 		// 浅色/深色由 body[data-ds-dark-theme] 的 token 覆盖自动适配。
 		var POPOVER_CSS = [
 			".nb-popover{box-sizing:border-box;position:absolute;top:calc(100% + 4px);right:0;z-index:1200;width:220px;max-width:calc(100vw - 24px);padding:6px;display:flex;flex-direction:column;gap:2px;background:var(--dsw-specific-menu);border:1px solid var(--dsw-alias-border-inverted);border-radius:12px;box-shadow:var(--dsw-shadow-lv3);color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);text-align:left}",
-			".nb-popover-title{font-size:12px;font-weight:600;line-height:16px;margin:4px 4px 2px;padding:2px 6px;color:var(--dsw-alias-label-tertiary)}",
+			".nb-popover-title{font-size:12px;line-height:16px;margin:4px 4px 2px;padding:2px 6px;color:var(--dsw-alias-label-tertiary)}",
 			".nb-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}",
 			".nb-row svg{flex:none;width:16px;height:16px;color:var(--dsw-alias-label-secondary)}",
 			".nb-row-label{flex:1;font-size:13px}",
@@ -187,11 +187,19 @@ window.__ModuleLoader__.load({
 		 *   - 初始状态 GET /notify-bell 一次拿 enabled + playback（backend 是唯一事实源）。
 		 *   - 外部点击 / Escape 关闭；原生 radio 提供键盘操作（方向键 + 空格）。
 		 */
-		function BellSettingsButton() {
+		function BellSettingsButton(props) {
 			var refs = react.useRef({ button: null, popover: null });
 			var state = react.useState({ enabled: null, playback: null, error: false, open: false });
 			var setState = state[1];
 			var current = state[0];
+
+			// 翻译：优先 slots 的官方 locale seat（DSH 语言状态是唯一事实源，
+			// 切换即时重渲染）；locale 未安装时 fallback 到字典 + html lang 检测。
+			var lang = detectLang(
+				typeof document !== "undefined" && document.documentElement ? document.documentElement.lang : "",
+				typeof navigator !== "undefined" && navigator.language ? navigator.language : ""
+			);
+			var tr = typeof props.t === "function" ? props.t : function (key) { return SETTINGS_I18N[lang][key]; };
 
 			// 初始加载：GET 一次拿 enabled + playback（不假设任何默认值）。
 			react.useEffect(function () {
@@ -264,12 +272,17 @@ window.__ModuleLoader__.load({
 					});
 			};
 
-			var lang = detectLang(
-				typeof document !== "undefined" && document.documentElement ? document.documentElement.lang : "",
-				typeof navigator !== "undefined" && navigator.language ? navigator.language : ""
-			);
-			var view = settingsView(current.enabled, current.playback, lang, current.error);
+			// 渲染视图映射（与 settingsView 同契约；文案经官方 t 翻译）。
+			var enabledOn = current.enabled === true;
+			var playbacks = PLAYBACK_OPTIONS.map(function (opt) {
+				return { value: opt.value, label: tr(opt.key), checked: current.playback === opt.value };
+			});
+			var title = tr("notifications");
+			var playbackTitle = tr("playback");
+			var switchLabel = enabledOn ? tr("on") : tr("off");
+			var errorText = current.error ? tr("failed") : "";
 			var bell = bellView(current.enabled, current.error);
+			var bellIcon = enabledOn ? "bell" : "bell-slash";
 
 			return react.createElement(
 				"div",
@@ -289,7 +302,7 @@ window.__ModuleLoader__.load({
 							setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: s.error, open: !s.open }; });
 						}
 					},
-					react.createElement(BellIcon, { muted: view.bellIcon === "bell-slash" })
+					react.createElement(BellIcon, { muted: bellIcon === "bell-slash" })
 				),
 				current.open ? react.createElement(
 					"div",
@@ -297,32 +310,32 @@ window.__ModuleLoader__.load({
 						ref: function (el) { refs.current.popover = el; },
 						className: "nb-popover",
 						role: "dialog",
-						"aria-label": view.title
+						"aria-label": title
 					},
-					react.createElement("div", { className: "nb-popover-title" }, view.title),
+					react.createElement("div", { className: "nb-popover-title" }, title),
 					react.createElement(
 						"div",
 						{ className: "nb-row" },
-						react.createElement(BellIcon, { muted: !view.enabledOn }),
-						react.createElement("span", { className: "nb-row-label" }, view.title),
+						react.createElement(BellIcon, { muted: !enabledOn }),
+						react.createElement("span", { className: "nb-row-label" }, title),
 						react.createElement(
 							"button",
 							{
 								type: "button",
 								className: "nb-switch",
 								role: "switch",
-								"aria-checked": view.enabledOn ? "true" : "false",
-								disabled: !view.enabledReady,
-								onClick: function () { setEnabledOpt(!view.enabledOn); }
+								"aria-checked": enabledOn ? "true" : "false",
+								disabled: current.enabled === null,
+								onClick: function () { setEnabledOpt(!enabledOn); }
 							},
-							view.switchLabel
+							switchLabel
 						)
 					),
-					react.createElement("div", { className: "nb-popover-title" }, view.playbackTitle),
+					react.createElement("div", { className: "nb-popover-title" }, playbackTitle),
 					react.createElement(
 						"div",
-						{ className: "nb-radio-group", role: "radiogroup", "aria-label": view.playbackTitle },
-						view.playbacks.map(function (opt) {
+						{ className: "nb-radio-group", role: "radiogroup", "aria-label": playbackTitle },
+						playbacks.map(function (opt) {
 							return react.createElement(
 								"label",
 								{ className: "nb-radio", key: opt.value },
@@ -331,14 +344,14 @@ window.__ModuleLoader__.load({
 									name: "nb-playback",
 									value: opt.value,
 									checked: opt.checked,
-									disabled: !view.playbackReady,
+									disabled: typeof current.playback !== "string",
 									onChange: function () { setPlaybackOpt(opt.value); }
 								}),
 								react.createElement("span", null, opt.label)
 							);
 						})
 					),
-					view.errorText ? react.createElement("div", { className: "nb-error", role: "status" }, view.errorText) : null
+					errorText ? react.createElement("div", { className: "nb-error", role: "status" }, errorText) : null
 				) : null
 			);
 		}
@@ -517,15 +530,25 @@ window.__ModuleLoader__.load({
 		//#endregion
 
 		//#region 插件入口
-		/** 所需服务：插槽注册表（conversation.session.header.utilities）。 */
-		var inject = ["slots"];
+		/**
+		 * 所需服务：插槽注册表（conversation.session.header.utilities）+ DSH
+		 * locale 服务（语言状态唯一事实源：注册字典 + slot locale seat）。
+		 */
+		var inject = ["slots", "locale"];
 
 		/**
-		 * 浏览器端插件主体：把铃铛注册进对话页顶栏工具区（Session log 按钮旁），
-		 * 并在 playback=browser 时启动 SSE 播放器（后端推送 → 浏览器播放）。
+		 * 浏览器端插件主体：注册中英文字典、把铃铛（通知设置 popover）
+		 * 注册进对话页顶栏工具区（Session log 按钮旁），并在 playback=browser
+		 * 时启动 SSE 播放器（后端推送 → 浏览器播放）。
 		 * @param ctx - 客户端根上下文。
 		 */
 		function apply(ctx) {
+			// DSH 官方 locale 字典注册（zh/en 与 SETTINGS_I18N 同源）；
+			// locale 未安装时跳过，组件 fallback 到 html lang 检测。
+			if (ctx.locale && typeof ctx.locale.register === "function") {
+				ctx.locale.register("notify-bell", SETTINGS_I18N);
+			}
+
 			ctx.effect(function () {
 				var style = document.createElement("style");
 				style.setAttribute("data-plugin", "dsh-notify-bell");
@@ -552,6 +575,7 @@ window.__ModuleLoader__.load({
 						name: "conversation.session.header.utilities",
 						id: "notify-bell-toggle",
 						order: 90,
+						locale: "notify-bell",
 						inject: function () { return {}; }
 					}, BellSettingsButton);
 					return function () { dispose(); };

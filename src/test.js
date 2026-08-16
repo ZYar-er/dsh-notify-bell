@@ -1345,17 +1345,19 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	globalThis.fetch = realFetch;
 	report('Y10: bellRpc ✓');
 
-	// Y11: apply 注册 slots（style effect + bell entry）
+	// Y11: apply 注册 slots（style effect + bell entry）+ locale 字典
 	const effects = [];
 	let injectedName = null;
 	let regOpts = null;
 	let regComp = null;
+	const localeRegistrations = [];
 	globalThis.document = {
 		createElement: () => ({ setAttribute() {}, remove() {} }),
 		head: { append() {} }
 	};
 	const mockCtx = {
 		effect: (fn) => { effects.push(fn); fn(); return () => {}; },
+		locale: { register: (ns, dict) => { localeRegistrations.push({ ns, dict }); } },
 		slots: {
 			inject: (name, cb) => { injectedName = name; cb(); return () => {}; },
 			register: (opts, comp) => { regOpts = opts; regComp = comp; return () => {}; }
@@ -1365,8 +1367,10 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(effects.length === 3, 'Y11 three effects (styles + browser audio + bell entry)', effects.length);
 	check(injectedName === 'conversation.session.header.utilities', 'Y11 slot name', injectedName);
 	check(regOpts?.id === 'notify-bell-toggle' && regOpts?.name === 'conversation.session.header.utilities' && regOpts?.order === 90, 'Y11 register opts', regOpts);
+	check(regOpts?.locale === 'notify-bell', 'Y11 locale seat declared', regOpts?.locale);
 	check(typeof regComp === 'function', 'Y11 component registered', typeof regComp);
-	report('Y11: apply 注册 slots ✓');
+	check(localeRegistrations.length === 1 && localeRegistrations[0].ns === 'notify-bell' && typeof localeRegistrations[0].dict?.zh === 'object' && typeof localeRegistrations[0].dict?.en === 'object', 'Y11 locale dictionary registered', localeRegistrations.map((r) => r.ns).join(','));
+	report('Y11: apply 注册 slots + locale ✓');
 
 	// Y12: client.js 打包格式（__ModuleLoader__ + 无相对导入 + require react）
 	const source = readFileSync(fileURLToPath(new URL('./client.js', import.meta.url)), 'utf8');
