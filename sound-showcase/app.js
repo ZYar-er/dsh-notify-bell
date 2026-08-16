@@ -153,7 +153,7 @@
 	 * 视觉进度由 requestAnimationFrame 每帧驱动（transform: scaleX），
 	 * 不依赖 timeupdate 的节流节奏；时间文字与 aria-valuenow 仍由
 	 * timeupdate 更新（低频，避免每帧改 DOM 文本）。短音频（约
-	 * 0.55–0.94s）下进度条因此连续平滑。
+	 * 0.55–0.89s）下进度条因此连续平滑。
 	 */
 	var rafIds = {};   // sound -> requestAnimationFrame id（每 audio 至多一个 loop）
 	var fillEls = {};  // sound -> .progress-fill element
