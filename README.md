@@ -8,7 +8,7 @@ A **community plugin** for DeepSeek Harness (DSH) — semantic notification soun
 
 Semantic notification sounds for [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness).
 
-> **Developer Preview · v0.11.0**
+> **Developer Preview · v0.11.1**
 
 🎧 **[Listen to the notification sounds →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
@@ -232,7 +232,11 @@ data.reason.kind = completed
 ```
 
 Only main sessions notify (subagent turns with `delegationDepth >= 1` are
-ignored). `goal/changed` with `operation = complete` no longer plays a sound.
+ignored), and the turn must actually produce a final assistant text answer:
+the last `assistant/message` must contain a non-empty `text` block and no
+`tool/call` may follow it. Empty no-op turns (a queued message cleared before
+it was claimed) and tool-call-only/concludes-turn endings are silently ignored.
+`goal/changed` with `operation = complete` no longer plays a sound.
 
 The duration is `turn/end.time - turn/start.time`; requests shorter than
 `minDuration` are logged but do not play a sound, and a completion without a

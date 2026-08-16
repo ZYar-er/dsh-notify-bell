@@ -8,7 +8,7 @@
 
 为 [DeepSeek Harness (DSH)](https://github.com/deepseek-ai/deepseek-harness) 提供语义化提示音通知。
 
-> **Developer Preview · v0.11.0**
+> **Developer Preview · v0.11.1**
 
 🎧 **[试听通知声音 →](https://zyar-er.github.io/dsh-notify-bell/sound-showcase/)**
 
@@ -231,8 +231,11 @@ type = turn/end
 data.reason.kind = completed
 ```
 
-只通知主会话（`delegationDepth >= 1` 的子代理回合会被忽略）。
-`goal/changed` 的 `operation = complete` 不再播放声音。
+只通知主会话（`delegationDepth >= 1` 的子代理回合会被忽略），并且该
+回合必须真正产生最终 assistant 文本回答：最后一个 `assistant/message`
+必须包含非空 `text` block，且其后不得再出现 `tool/call`。空 no-op 回合
+（排队消息在 claim 前被清除）和 tool-call-only / concludes-turn 结束
+会被完全静默忽略。`goal/changed` 的 `operation = complete` 不再播放声音。
 
 时长定义为 `turn/end.time - turn/start.time`；短于 `minDuration` 的请求
 只输出日志，不播放声音；缺少对应 `turn/start`（插件在回合中途加载）时

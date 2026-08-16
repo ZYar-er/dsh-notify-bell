@@ -18,8 +18,11 @@
  *
  * 事件语义（受配置 events.* 控制）：
  *   - complete：turn/end（reason.kind === "completed"，主会话
- *     delegationDepth === 0）时按 events.complete.sound（默认 done）
- *     播放；duration = turn/end.time - turn/start.time，小于 minDuration
+ *     delegationDepth === 0）且该 turn 的最后一个 assistant/message
+ *     是非空 text 最终回答、其后无新 tool/call 时，按
+ *     events.complete.sound（默认 done）播放；空 no-op turn 与
+ *     tool-call-only/concludes-turn turn 完全静默。
+ *     duration = turn/end.time - turn/start.time，小于 minDuration
  *     只输出日志；缺少 turn/start（插件中途加载）只日志不播放。
  *     goal/changed complete 不再触发完成通知。
  *   - block：不受 minDuration 限制，播放 events.block.sound（默认 block）。
@@ -195,6 +198,9 @@ export function apply(ctx, config = {}, options = {}) {
 	const turns = createTurnTracker();
 
 	ctx.on('session/event', (session, event) => {
+		// 0) tool/call 必须先进入 turn tracker（即使该 tool 同时是 question），
+		// 这样“最终 assistant 文本之后没有新 tool/call”的判定才完整。
+		if (event?.type === 'tool/call') turns.onToolCall(session, event);
 		// 1) approval / question：即时通知（不受 minDuration 限制）。
 		const classified = classifyApproval(session, event) ?? classifyQuestion(session, event);
 		if (classified) {
@@ -212,9 +218,11 @@ export function apply(ctx, config = {}, options = {}) {
 			backend.play(config.events.approval.sound);
 			return;
 		}
-		// 2) turn 流：turn/start 计时、user/message 摘要、turn/end 完成。
+		// 2) turn 流：turn/start 计时、user/message 摘要、
+		//    assistant/message 最终回答判定、turn/end 完成。
 		if (event?.type === 'turn/start') { turns.onTurnStart(session, event); return; }
 		if (event?.type === 'user/message') { turns.onUserMessage(session, event); return; }
+		if (event?.type === 'assistant/message') { turns.onAssistantMessage(session, event); return; }
 		if (event?.type === 'turn/end') {
 			const complete = turns.onTurnEnd(session, event);
 			if (!complete || !admit(complete)) return;

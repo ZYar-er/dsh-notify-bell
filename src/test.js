@@ -1,5 +1,5 @@
 /**
- * dsh-notify-bell v0.11 — 全量测试（final-answer completion + approval/question + Config schema）。
+ * dsh-notify-bell v0.11.1 — 全量测试（strict final-assistant-text completion + approval/question + Config schema）。
  *
  * 配置测试（loadConfig / sanitizeConfig / defaultConfigPath）：
  *   C1 默认配置深比较（含 approval、permissionGapMs）
@@ -34,6 +34,13 @@
  * v0.11 新增：
  *   T1-T24 turn/end(completed) 完成语义（时长/去重/子代理过滤/摘要/
  *   goal complete 静音/联动/backend）
+ *
+ * v0.11.1 C1 严格化：
+ *   T18a/T18b 拆分空 no-op 与有最终 assistant text 的无 user 轮次；
+ *   C1-1..C1-15 覆盖 no-op / 正常 / goal round / tool-call-only /
+ *   文本后 tool/call / 多 assistant / 重复 end / 非 completed /
+ *   子 agent / 长短 duration / 缺 turn/start / 混合 text+tool-call /
+ *   非 completed 后完整重放。
  *
  * v0.10 新增：
  *   S1-S6 官方 Config schema（默认值/校验 fail loudly）+ mergeConfig 优先级
@@ -111,15 +118,81 @@ const MOCK_SESSION = { id: 'session-1' };
 // ---------- v0.11 turn 基建（final-answer completion） ----------
 const MAIN_SESSION = { id: 'session-main', header: { id: 'session-main', delegationDepth: 0 } };
 const SUB_SESSION = { id: 'session-sub', header: { id: 'session-sub', delegationDepth: 1 } };
-const turnStart = (turn, time) => ({ type: 'turn/start', time, data: { turn } });
+let messageSeq = 0;
+const nextId = (prefix) => `${prefix}-${++messageSeq}`;
+const withSeq = (event, seq) => Number.isInteger(seq) ? { ...event, seq } : event;
+const turnStart = (turn, time, seq) => withSeq({ type: 'turn/start', time, data: { turn } }, seq);
 const turnUserMsg = (turn, text, time) => ({ type: 'user/message', time, data: { content: [{ type: 'text', text }], source: { kind: 'user' }, role: 'user', id: 'm-' + turn } });
-const turnEnd = (turn, reason, time) => ({ type: 'turn/end', time, data: { turn, reason: { kind: reason } } });
-/** 完成一轮：turn/start → user/message → turn/end(completed)。默认 30s 时长。 */
+const goalUserMsg = (turn, text, time) => ({ type: 'user/message', time, data: { content: [{ type: 'text', text }], source: { kind: 'goal', goalId: 'goal-1', revision: 1, round: 1 }, role: 'user', id: nextId('goal-msg') } });
+const turnEnd = (turn, reason, time, seq) => withSeq({ type: 'turn/end', time, data: { turn, reason: { kind: reason } } }, seq);
+const textBlock = (text) => ({ type: 'text', text });
+const toolCallBlock = (id, name, args = '{}') => ({ type: 'tool-call', id, name, arguments: args });
+/** DSH assistant/message 真实载荷：data.message.content 为 block 数组。 */
+const assistantMessage = (turn, content, time, opts = {}) => withSeq({
+	type: 'assistant/message',
+	time,
+	data: {
+		turn,
+		step: opts.step ?? 1,
+		message: {
+			id: opts.id ?? nextId('assistant'),
+			role: 'assistant',
+			source: { kind: 'model', provider: 'mock', model: 'mock' },
+			content: Array.isArray(content) ? content : [content]
+		},
+		...(opts.usage === undefined ? {} : { usage: opts.usage })
+	}
+}, opts.seq);
+const assistantText = (turn, text, time, opts = {}) => assistantMessage(turn, textBlock(text), time, opts);
+/** DSH tool/call 真实载荷：turn/step/callId/name/arguments。 */
+const toolCall = (turn, callId, name, time, opts = {}) => withSeq({
+	type: 'tool/call',
+	time,
+	data: {
+		turn,
+		step: opts.step ?? 1,
+		callId,
+		name,
+		arguments: opts.arguments ?? '{}'
+	}
+}, opts.seq);
+const toolResult = (turn, callId, time, opts = {}) => ({
+	type: 'tool/result',
+	time,
+	data: {
+		turn,
+		step: opts.step ?? 1,
+		message: {
+			id: opts.id ?? nextId('tool-result'),
+			role: 'user',
+			source: { kind: 'tool', callId },
+			content: [{ type: 'tool-result', toolCallId: callId, content: [{ type: 'text', text: opts.text ?? 'ok' }] }]
+		}
+	}
+});
+/** 正常完成一轮：turn/start → user/message → assistant/message(final text) → turn/end(completed)。默认 30s 时长。 */
 const completeTurn = (s, turn, opts = {}) => {
 	const now = opts.endTime ?? Date.now();
 	const start = now - (opts.startAgoMs ?? 30_000);
+	s.emit('session/event', MAIN_SESSION, turnStart(turn, start, opts.startSeq));
+	if (opts.userMessage !== false) s.emit('session/event', MAIN_SESSION, turnUserMsg(turn, opts.text ?? '为 deepseek harness 制作通知插件', start + 5));
+	if (opts.assistant !== false) s.emit('session/event', MAIN_SESSION, assistantText(turn, opts.finalText ?? '最终回答', now - (opts.finalTextAgoMs ?? 1_000), { step: opts.step ?? 1, seq: opts.assistantSeq }));
+	s.emit('session/event', MAIN_SESSION, turnEnd(turn, 'completed', now, opts.endSeq));
+};
+/** goal 自动续跑轮次：无 human user/message，但有最终 assistant text。 */
+const completeGoalRound = (s, turn, opts = {}) => {
+	const now = opts.endTime ?? Date.now();
+	const start = now - (opts.startAgoMs ?? 30_000);
 	s.emit('session/event', MAIN_SESSION, turnStart(turn, start));
-	s.emit('session/event', MAIN_SESSION, turnUserMsg(turn, opts.text ?? '为 deepseek harness 制作通知插件', start + 5));
+	s.emit('session/event', MAIN_SESSION, goalUserMsg(turn, opts.text ?? '继续完成目标', start + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(turn, opts.finalText ?? '目标已完成', now - 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(turn, 'completed', now));
+};
+/** no-op 空 claim：turn/start → turn/end(completed)，中间无任何消息。 */
+const completeNoOpTurn = (s, turn, opts = {}) => {
+	const now = opts.endTime ?? Date.now();
+	const start = now - (opts.startAgoMs ?? 30_000);
+	s.emit('session/event', MAIN_SESSION, turnStart(turn, start));
 	s.emit('session/event', MAIN_SESSION, turnEnd(turn, 'completed', now));
 };
 const approvalEvent = (overrides = {}) => ({
@@ -1109,9 +1182,9 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	completeTurn(s, 1);
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0 && s.logLines().length === 0, 'Y5 runtime disabled immediately', s.writes);
-	// 重新启用后恢复
+	// 重新启用后恢复（DSH turn 号单调递增，这里用 turn 2 模拟下一轮）
 	await s.call('setEnabled', { enabled: true });
-	completeTurn(s, 1, { startAgoMs: 30_000 });
+	completeTurn(s, 2, { startAgoMs: 30_000 });
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'Y5 re-enabled works', s.bells());
 	rmSync(s.dir, { recursive: true, force: true });
@@ -1460,7 +1533,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 }
 
 // ---------- T: v0.11 final-answer completion（turn/end 语义） ----------
-// T1: turn/start → user/message → turn/end(completed) → complete 通知（日志 + done 1 BEL）
+// T1: turn/start → user/message → assistant/message(final text) → turn/end(completed) → complete 通知（日志 + done 1 BEL）
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
@@ -1481,6 +1554,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 		const t0 = Date.now() - 30_000;
 		s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
 		s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '任务', t0 + 5));
+		s.emit('session/event', MAIN_SESSION, assistantText(1, '本应有最终回答', Date.now() - 1_000));
 		s.emit('session/event', MAIN_SESSION, turnEnd(1, reason, Date.now()));
 		await sleep(GAP * 2 + 20);
 		check(s.bells().length === 0 && s.logLines().length === 0, label + ' ' + reason + ' silent', s.writes);
@@ -1538,6 +1612,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	s.emit('session/event', MAIN_SESSION, { type: 'assistant/chunk', time: t0 + 200, data: { turn: 1, step: 1, chunk: { type: 'text', text: 'x' } } });
 	s.emit('session/event', MAIN_SESSION, { type: 'tool/call', time: t0 + 300, data: { turn: 1, step: 1, callId: 'c1', name: 'bash', arguments: '{}' } });
 	s.emit('session/event', MAIN_SESSION, { type: 'step/end', time: t0 + 400, data: { turn: 1, step: 1 } });
+	s.emit('session/event', MAIN_SESSION, assistantText(1, '最终回答', t0 + 500));
 	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'T10 one BEL', s.bells());
@@ -1556,6 +1631,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	s.emit('session/event', MAIN_SESSION, approvalEvent({ id: 'req-1' }));
 	await sleep(GAP * 3 + 30);
 	check(s.bells().length === 2, 'T11 permission first (2 BEL)', s.bells());
+	s.emit('session/event', MAIN_SESSION, assistantText(1, '已获批准，任务完成', Date.now() - 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 3 + 30);
 	check(s.bells().length === 3, 'T11 permission + done', s.bells());
@@ -1579,6 +1655,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	});
 	await sleep(GAP * 3 + 30);
 	check(s.bells().length === 2, 'T12 question first (2 BEL)', s.bells());
+	s.emit('session/event', MAIN_SESSION, assistantText(1, '收到答案，任务完成', Date.now() - 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 3 + 30);
 	check(s.bells().length === 3, 'T12 question + done', s.bells());
@@ -1595,6 +1672,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const t0 = Date.now() - 30_000;
 	s.emit('session/event', SUB_SESSION, turnStart(1, t0));
 	s.emit('session/event', SUB_SESSION, turnUserMsg(1, '子代理任务', t0 + 5));
+	s.emit('session/event', SUB_SESSION, assistantText(1, '子代理最终回答', Date.now() - 1_000));
 	s.emit('session/event', SUB_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	check(s.writes.length === 0, 'T13 subagent silent', s.writes);
@@ -1632,10 +1710,11 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	report('T15: 多 turn 独立计时/去重 ✓');
 }
 
-// T16: 缺 turn/start → 只日志（unknown duration），不播放
+// T16: 缺 turn/start + 有最终 assistant text → 只日志（unknown duration），不播放
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
+	s.emit('session/event', MAIN_SESSION, assistantText(58, '最终回答', Date.now() - 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(58, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0, 'T16 no BEL without start', s.bells());
@@ -1656,18 +1735,31 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	report('T17: user message 摘要 ✓');
 }
 
-// T18: 无 user/message → fallback "turn #N"
+// T18a: no-op 空 turn（无 user/message、无 assistant/message）→ 完全静默
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeNoOpTurn(s, 3, { startAgoMs: 30_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'T18a no-op turn completely silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('T18a: 空 claim no-op 完全静默 ✓');
+}
+
+// T18b: 无 user/message 但有最终 assistant text → fallback "turn #N" 并正常通知
 {
 	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
 	s.applyPlugin();
 	const t0 = Date.now() - 30_000;
 	s.emit('session/event', MAIN_SESSION, turnStart(3, t0));
+	s.emit('session/event', MAIN_SESSION, assistantText(3, '自动轮次最终回答', Date.now() - 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(3, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	const l = s.logLines();
-	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): turn #3', 'T18 fallback turn #N', l);
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): turn #3', 'T18b fallback turn #N', l);
+	check(s.bells().length === 1, 'T18b one BEL', s.bells());
 	rmSync(s.dir, { recursive: true, force: true });
-	report('T18: 无 user message fallback ✓');
+	report('T18b: 无 user message 但有最终 assistant text ✓');
 }
 
 // T19: user message 超过 maxLength → 截断
@@ -1756,6 +1848,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const t0 = Date.now() - 30_000;
 	s.emit('session/event', liveMain, turnStart(1, t0));
 	s.emit('session/event', liveMain, turnUserMsg(1, '真实主会话', t0 + 5));
+	s.emit('session/event', liveMain, assistantText(1, '最终回答', Date.now() - 1_000));
 	s.emit('session/event', liveMain, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'T25 live main session -> BEL', s.bells());
@@ -1773,9 +1866,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'interrupted', t0 + 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
-	check(s.bells().length === 0, 'T26 no BEL after interrupted+replay', s.bells());
-	const l = s.logLines();
-	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed: turn #1', 'T26 stale entry consumed, no false complete', l);
+	check(s.writes.length === 0, 'T26 interrupted+completed replay completely silent', s.writes);
 	rmSync(s.dir, { recursive: true, force: true });
 	report('T26: interrupted 后重放 completed 不误报 ✓');
 }
@@ -1788,6 +1879,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const t0 = Date.now() - 30_000;
 	s.emit('session/event', SUB_SESSION, turnStart(1, t0));
 	s.emit('session/event', SUB_SESSION, turnUserMsg(1, '子代理任务', t0 + 5));
+	s.emit('session/event', SUB_SESSION, assistantText(1, '子代理最终回答', Date.now() - 1_000));
 	s.emit('session/event', SUB_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 1, 'T27 only main BEL', s.bells());
@@ -1803,6 +1895,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const t0 = Date.now() - 30_000;
 	s.emit('session/event', MAIN_SESSION, turnUserMsg(1, '过早的消息', t0 - 5_000));
 	s.emit('session/event', MAIN_SESSION, turnStart(1, t0));
+	s.emit('session/event', MAIN_SESSION, assistantText(1, '最终回答', Date.now() - 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(1, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	const l = s.logLines();
@@ -1817,6 +1910,7 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	s.applyPlugin();
 	s.emit('session/event', MAIN_SESSION, { type: 'turn/start', data: { turn: 7 } });
 	s.emit('session/event', MAIN_SESSION, turnUserMsg(7, '无时间', Date.now()));
+	s.emit('session/event', MAIN_SESSION, assistantText(7, '最终回答', Date.now() - 1_000));
 	s.emit('session/event', MAIN_SESSION, turnEnd(7, 'completed', Date.now()));
 	await sleep(GAP * 2 + 20);
 	check(s.bells().length === 0, 'T29 no BEL without start time', s.bells());
@@ -1837,6 +1931,230 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(s.logLines().length === 1, 'T30 one log only', s.logLines());
 	rmSync(s.dir, { recursive: true, force: true });
 	report('T30: 短 turn 重复 turn/end 只一次日志 ✓');
+}
+
+// ---------- C1: 严格 final assistant text 判定 ----------
+// C1-1: 空 claim no-op（无任何 message）→ 无日志、无声音
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeNoOpTurn(s, 1, { startAgoMs: 30_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-1 no-op turn completely silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-1: 空 claim no-op 完全静默 ✓');
+}
+
+// C1-2: 正常 user message + assistant final text → 正常 done
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 1, { startAgoMs: 30_000, text: '正常用户请求', finalText: '正常最终回答' });
+	await sleep(GAP * 2 + 20);
+	const l = s.logLines();
+	check(l.length === 1 && l[0].includes('正常用户请求') && l[0].includes('✓ completed (30s)'), 'C1-2 log', l);
+	check(s.bells().length === 1, 'C1-2 one BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-2: 正常 final text 触发 done ✓');
+}
+
+// C1-3: goal 自动续跑轮次（source.kind=goal，无 human user/message）+ final text → 正常 done
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeGoalRound(s, 1, { startAgoMs: 30_000 });
+	await sleep(GAP * 2 + 20);
+	const l = s.logLines();
+	check(l.length === 1 && l[0] === '[notify-bell] ✓ completed (30s): turn #1', 'C1-3 goal round fallback log', l);
+	check(s.bells().length === 1, 'C1-3 one BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-3: goal round + final text 正常 done ✓');
+}
+
+// C1-4: assistant/message(tool-call only) + tool/call + tool/result + turn/end(completed) → 不通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(4, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(4, '执行工具', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantMessage(4, [toolCallBlock('c4', 'finish_tool')], t0 + 10));
+	s.emit('session/event', MAIN_SESSION, toolCall(4, 'c4', 'finish_tool', t0 + 20));
+	s.emit('session/event', MAIN_SESSION, toolResult(4, 'c4', t0 + 30));
+	s.emit('session/event', MAIN_SESSION, turnEnd(4, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-4 tool-call-only concludesTurn silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-4: tool-call-only concludesTurn 不通知 ✓');
+}
+
+// C1-5: assistant text 之后又出现 tool/call，turn/end(completed) 不通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(5, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(5, '先回答再工具', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(5, '这不是最终回答', t0 + 10));
+	s.emit('session/event', MAIN_SESSION, toolCall(5, 'c5', 'finish_tool', t0 + 20));
+	s.emit('session/event', MAIN_SESSION, toolResult(5, 'c5', t0 + 30));
+	s.emit('session/event', MAIN_SESSION, turnEnd(5, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-5 text-before-toolcall completed silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-5: 文本后又出现 tool/call 不通知 ✓');
+}
+
+// C1-6: 最终 assistant text 后没有 tool/call → 通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(6, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(6, '正常任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(6, '真正的最终回答', Date.now() - 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(6, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1 && s.bells().length === 1, 'C1-6 final text without toolcall notifies', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-6: 最终文本后无 tool/call 通知 ✓');
+}
+
+// C1-7: 多个 assistant/message（tool-call-only → final text）→ 只通知一次
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(7, t0, 10));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(7, '多步任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantMessage(7, [toolCallBlock('c7', 'bash')], t0 + 10, { seq: 11 }));
+	s.emit('session/event', MAIN_SESSION, toolCall(7, 'c7', 'bash', t0 + 20, { seq: 12 }));
+	s.emit('session/event', MAIN_SESSION, toolResult(7, 'c7', t0 + 30));
+	s.emit('session/event', MAIN_SESSION, assistantText(7, '工具完成后的最终回答', t0 + 40, { seq: 13 }));
+	s.emit('session/event', MAIN_SESSION, turnEnd(7, 'completed', Date.now(), 14));
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1, 'C1-7 one log', s.logLines());
+	check(s.bells().length === 1, 'C1-7 one BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-7: 多 assistant/message 只最终 text 通知一次 ✓');
+}
+
+// C1-8: duplicate turn/end → 只通知一次
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 8, { startAgoMs: 30_000 });
+	s.emit('session/event', MAIN_SESSION, turnEnd(8, 'completed', Date.now() + 100));
+	s.emit('session/event', MAIN_SESSION, turnEnd(8, 'completed', Date.now() + 200));
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1, 'C1-8 one log', s.logLines());
+	check(s.bells().length === 1, 'C1-8 one BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-8: duplicate turn/end 只通知一次 ✓');
+}
+
+// C1-9: reason != completed（即使有 final text）→ 不通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(9, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(9, '任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(9, '最终回答', t0 + 10));
+	s.emit('session/event', MAIN_SESSION, turnEnd(9, 'error', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-9 non-completed silent despite final text', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-9: reason != completed 不通知 ✓');
+}
+
+// C1-10: 子 agent 即使有 final text → 不通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', SUB_SESSION, turnStart(10, t0));
+	s.emit('session/event', SUB_SESSION, turnUserMsg(10, '子任务', t0 + 5));
+	s.emit('session/event', SUB_SESSION, assistantText(10, '子代理最终回答', t0 + 10));
+	s.emit('session/event', SUB_SESSION, turnEnd(10, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-10 subagent with final text silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-10: 子 agent 不通知 ✓');
+}
+
+// C1-11: short duration + final text → 日志、不响
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 11, { startAgoMs: 2_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1 && s.logLines()[0].includes('✓ completed (2s)'), 'C1-11 log kept', s.logLines());
+	check(s.bells().length === 0, 'C1-11 no BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-11: 短请求只日志 ✓');
+}
+
+// C1-12: long duration + final text → done
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	completeTurn(s, 12, { startAgoMs: 60_000 });
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1 && s.logLines()[0].includes('✓ completed (60s)'), 'C1-12 log', s.logLines());
+	check(s.bells().length === 1, 'C1-12 one BEL', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-12: 长请求 done ✓');
+}
+
+// C1-13: 缺 turn/start + 有最终 assistant text → 安全日志，不虚构 duration
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	s.emit('session/event', MAIN_SESSION, assistantText(77, '插件中途加载后的最终回答', Date.now() - 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(77, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.logLines().length === 1 && s.logLines()[0] === '[notify-bell] ✓ completed: turn #77', 'C1-13 unknown duration log', s.logLines());
+	check(s.bells().length === 0, 'C1-13 no BEL without start', s.bells());
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-13: 缺 turn/start 只安全日志 ✓');
+}
+
+// C1-14: assistant/message 同时含 text + tool-call → 不是最终文本回答
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(14, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(14, '混合回答', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantMessage(14, [textBlock('带工具调用的文本'), toolCallBlock('c14', 'finish_tool')], t0 + 10));
+	s.emit('session/event', MAIN_SESSION, toolCall(14, 'c14', 'finish_tool', t0 + 20));
+	s.emit('session/event', MAIN_SESSION, toolResult(14, 'c14', t0 + 30));
+	s.emit('session/event', MAIN_SESSION, turnEnd(14, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-14 mixed text+toolcall silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-14: 混合 text+tool-call 不通知 ✓');
+}
+
+// C1-15: 非 completed 结束后完整重放同 turn（start + final text + completed）→ 仍只按首次 end 处理，不通知
+{
+	const s = setup({ bell: { gapMs: GAP, permissionGapMs: GAP } });
+	s.applyPlugin();
+	const t0 = Date.now() - 30_000;
+	s.emit('session/event', MAIN_SESSION, turnStart(15, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(15, '原任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(15, '原回答', t0 + 10));
+	s.emit('session/event', MAIN_SESSION, turnEnd(15, 'error', t0 + 1_000));
+	// 完整重放同 turn，并补齐 final text + completed
+	s.emit('session/event', MAIN_SESSION, turnStart(15, t0));
+	s.emit('session/event', MAIN_SESSION, turnUserMsg(15, '原任务', t0 + 5));
+	s.emit('session/event', MAIN_SESSION, assistantText(15, '重放后的最终回答', Date.now() - 1_000));
+	s.emit('session/event', MAIN_SESSION, turnEnd(15, 'completed', Date.now()));
+	await sleep(GAP * 2 + 20);
+	check(s.writes.length === 0, 'C1-15 full replay after non-completed silent', s.writes);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('C1-15: 非 completed 后完整重放不通知 ✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');
