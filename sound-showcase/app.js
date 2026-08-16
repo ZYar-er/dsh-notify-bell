@@ -7,24 +7,52 @@
 (function () {
 	"use strict";
 
-	/* ---------- Data ---------- */
-	/** Status text shown next to the demo buttons for each sound. */
-	var DEMO_STATUS = {
-		done: "Task completed",
-		permission: "Approval required",
-		question: "Question waiting",
-		block: "Goal blocked",
-		error: "Agent error"
+	/* ---------- Localization ---------- */
+	var ZH = (document.documentElement.lang || "").toLowerCase().indexOf("zh") === 0;
+
+	var I18N = ZH ? {
+		themeLabel: { system: "主题：系统", light: "主题：浅色", dark: "主题：深色" },
+		play: "播放",
+		pause: "暂停",
+		status: {
+			done: "任务已完成",
+			permission: "需要审批",
+			question: "等待提问回答",
+			block: "目标受阻",
+			error: "Agent 出错"
+		},
+		event: {
+			done: "完成",
+			permission: "审批",
+			question: "提问",
+			block: "受阻",
+			error: "错误"
+		}
+	} : {
+		themeLabel: { system: "Theme: system", light: "Theme: light", dark: "Theme: dark" },
+		play: "Play",
+		pause: "Pause",
+		status: {
+			done: "Task completed",
+			permission: "Approval required",
+			question: "Question waiting",
+			block: "Goal blocked",
+			error: "Agent error"
+		},
+		event: {
+			done: "Complete",
+			permission: "Approval",
+			question: "Question",
+			block: "Block",
+			error: "Error"
+		}
 	};
 
+	/** Status text shown next to the demo buttons for each sound. */
+	var DEMO_STATUS = I18N.status;
+
 	/** Human event name for aria-labels. */
-	var EVENT_NAMES = {
-		done: "Complete",
-		permission: "Approval",
-		question: "Question",
-		block: "Block",
-		error: "Error"
-	};
+	var EVENT_NAMES = I18N.event;
 
 	/* ---------- Theme ---------- */
 	var THEME_KEY = "dsh-notify-bell-theme";
@@ -33,7 +61,7 @@
 	function applyTheme(theme) {
 		document.documentElement.setAttribute("data-theme", theme);
 		var label = document.querySelector(".theme-label");
-		if (label) label.textContent = "Theme: " + theme;
+		if (label) label.textContent = I18N.themeLabel[theme] || theme;
 	}
 
 	function currentTheme() {
@@ -81,8 +109,10 @@
 		var btn = document.querySelector('.play-btn[data-play="' + sound + '"]');
 		if (!btn) return;
 		btn.classList.toggle("playing", isPlaying);
-		btn.querySelector(".play-text").textContent = isPlaying ? "Pause" : "Play";
-		btn.setAttribute("aria-label", (isPlaying ? "Pause " : "Play ") + EVENT_NAMES[sound] + " sound");
+		btn.querySelector(".play-text").textContent = isPlaying ? I18N.pause : I18N.play;
+		btn.setAttribute("aria-label", ZH
+			? (isPlaying ? I18N.pause : I18N.play) + EVENT_NAMES[sound] + "声音"
+			: (isPlaying ? I18N.pause + " " : I18N.play + " ") + EVENT_NAMES[sound] + " sound");
 	}
 
 	function playSound(sound) {

@@ -129,18 +129,8 @@ code {
 	width: 72px;
 	height: 72px;
 	flex: none;
-	filter: none; /* light theme: black bell as-is */
-}
-
-/* Dark theme: invert black -> white. PNG keeps its transparent background. */
-html[data-theme="dark"] .brand-logo {
-	filter: invert(1);
-}
-
-@media (prefers-color-scheme: dark) {
-	:root:not([data-theme="light"]) .brand-logo {
-		filter: invert(1);
-	}
+	/* Brand icon: fixed #4176e6 in both themes (PNG carries the color). */
+	filter: none;
 }
 
 .brand h1 {

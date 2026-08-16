@@ -3,8 +3,15 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="DSH Notify Bell — semantic notification sounds for DeepSeek Harness. Preview the five notification sounds: done, permission, question, block, error.">
-<title>DSH Notify Bell — Semantic notification sounds</title>
+<meta name="description" content="DSH Notify Bell v0.10.0 — semantic notification sounds for DeepSeek Harness. Preview the five notification sounds: done, permission, question, block, error.">
+<meta property="og:title" content="DSH Notify Bell v0.10.0 — Semantic notification sounds">
+<meta property="og:description" content="Community plugin for DeepSeek Harness. Preview the five notification sounds: done, permission, question, block, error.">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://zyar-er.github.io/dsh-notify-bell/sound-showcase/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="DSH Notify Bell v0.10.0 — Semantic notification sounds">
+<meta name="twitter:description" content="Community plugin for DeepSeek Harness. Preview the five notification sounds: done, permission, question, block, error.">
+<title>DSH Notify Bell v0.10.0 — Semantic notification sounds</title>
 <link rel="stylesheet" href="styles.css">
 <link rel="icon" type="image/png" href="./assets/favicon.png">
 </head>
@@ -17,12 +24,13 @@
 		<div>
 			<h1>DSH Notify Bell</h1>
 			<p class="subtitle">Semantic notification sounds for DeepSeek Harness</p>
-			<p class="badge">Developer Preview · v0.9.0</p>
+			<p class="badge">Developer Preview · v0.10.0</p>
 		</div>
 	</div>
 	<nav class="header-links" aria-label="Project links">
 		<a class="link-btn" href="https://github.com/zyar-er/dsh-notify-bell" target="_blank" rel="noopener">GitHub</a>
 		<a class="link-btn" href="https://github.com/zyar-er/dsh-notify-bell#readme" target="_blank" rel="noopener">Installation / README</a>
+		<a class="link-btn" href="./index.zh.html" lang="zh-CN" aria-label="Switch to Chinese">中文</a>
 		<button type="button" class="link-btn" id="theme-toggle" aria-label="Switch color theme: system, light or dark">
 			<span class="theme-label" aria-hidden="true">Theme: system</span>
 		</button>
@@ -85,7 +93,7 @@
 					</div>
 				</div>
 				<p class="card-meta">Source: react-sounds — <span class="rs-name">ui/success_bling</span></p>
-				<p class="card-meta">File: <code>sounds/done.wav</code> · 0.76s</p>
+				<p class="card-meta">File: <code>sounds/done.wav</code> · 0.81s</p>
 				<div class="card-controls">
 					<button type="button" class="play-btn" data-play="done" aria-label="Play Complete sound">
 						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">Play</span>
@@ -169,7 +177,7 @@
 					</div>
 				</div>
 				<p class="card-meta">Source: react-sounds — <span class="rs-name">ui/blocked</span></p>
-				<p class="card-meta">File: <code>sounds/block.wav</code> · 0.89s</p>
+				<p class="card-meta">File: <code>sounds/block.wav</code> · 0.94s</p>
 				<div class="card-controls">
 					<button type="button" class="play-btn" data-play="block" aria-label="Play Block sound">
 						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">Play</span>
@@ -230,14 +238,14 @@
 		</ul>
 		<p class="notes-src">
 			Sound assets are sourced from
-			<a href="https://www.reactsounds.com/sounds" target="_blank" rel="noopener">react-sounds</a>.
+			<a href="https://github.com/aediliclabs/react-sounds" target="_blank" rel="noopener">react-sounds</a>.
 			Only the five referenced sound names are used; this page is an independent showcase and is not affiliated with react-sounds.
 		</p>
 	</section>
 </main>
 
 <footer class="site-footer">
-	<p>DSH Notify Bell · v0.9.0 · semantic sounds for <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener">DeepSeek Harness</a></p>
+	<p>DSH Notify Bell · v0.10.0 · semantic sounds for <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener">DeepSeek Harness</a></p>
 	<p class="footer-credits">Icons: <a href="https://phosphoricons.com/" target="_blank" rel="noopener">Phosphor Icons</a> (MIT License)</p>
 </footer>
 

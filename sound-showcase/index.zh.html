@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="zh-CN" data-theme="system">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="DSH Notify Bell v0.10.0 — DeepSeek Harness 的语义化通知声音。试听完成、审批、提问、受阻、错误五种通知声音。">
+<meta property="og:title" content="DSH Notify Bell v0.10.0 — DeepSeek Harness 语义化通知声音">
+<meta property="og:description" content="DeepSeek Harness 社区插件。试听五种通知声音：完成、审批、提问、受阻、错误。">
+<meta property="og:type" content="website">
+<meta property="og:url" content="https://zyar-er.github.io/dsh-notify-bell/sound-showcase/">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="DSH Notify Bell v0.10.0 — DeepSeek Harness 语义化通知声音">
+<meta name="twitter:description" content="DeepSeek Harness 社区插件。试听五种通知声音：完成、审批、提问、受阻、错误。">
+<title>DSH Notify Bell v0.10.0 — DeepSeek Harness 语义化通知声音</title>
+<link rel="stylesheet" href="styles.css">
+<link rel="icon" type="image/png" href="./assets/favicon.png">
+</head>
+<body>
+
+<!-- ============ Header ============ -->
+<header class="site-header">
+	<div class="brand">
+		<img class="brand-logo" src="./assets/bell.png" alt="DSH Notify Bell" width="72" height="72">
+		<div>
+			<h1>DSH Notify Bell</h1>
+			<p class="subtitle">DeepSeek Harness 的语义化通知声音</p>
+			<p class="badge">开发者预览 · v0.10.0</p>
+		</div>
+	</div>
+	<nav class="header-links" aria-label="Project links">
+		<a class="link-btn" href="https://github.com/zyar-er/dsh-notify-bell" target="_blank" rel="noopener">GitHub</a>
+		<a class="link-btn" href="https://github.com/zyar-er/dsh-notify-bell#readme" target="_blank" rel="noopener">安装 / README</a>
+		<a class="link-btn" href="./index.html" lang="en" aria-label="Switch to English">English</a>
+		<button type="button" class="link-btn" id="theme-toggle" aria-label="切换颜色主题：系统、浅色或深色">
+			<span class="theme-label" aria-hidden="true">Theme: system</span>
+		</button>
+	</nav>
+</header>
+
+<main>
+	<!-- ============ Demo ============ -->
+	<section class="demo" aria-labelledby="demo-heading">
+		<h2 id="demo-heading">试听通知系统</h2>
+		<p class="demo-hint">点击任一按钮，即可试听插件在该 Agent 状态下使用的真实声音。</p>
+		<div class="demo-grid" role="group" aria-label="Demo sounds">
+			<button type="button" class="demo-btn" data-sound="done" aria-label="播放完成声音">
+				<span class="demo-btn-icon" aria-hidden="true">
+					<svg width="18" height="18" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg>
+				</span>
+				✓ 完成
+			</button>
+			<button type="button" class="demo-btn" data-sound="permission" aria-label="播放审批声音">
+				<span class="demo-btn-icon" aria-hidden="true">
+					<svg width="18" height="18" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-68-56a12,12,0,1,1-12-12A12,12,0,0,1,140,152Z"/></svg>
+				</span>
+				🔐 审批
+			</button>
+			<button type="button" class="demo-btn" data-sound="question" aria-label="播放提问声音">
+				<span class="demo-btn-icon" aria-hidden="true">
+					<svg width="18" height="18" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg>
+				</span>
+				❓ 提问
+			</button>
+			<button type="button" class="demo-btn" data-sound="block" aria-label="播放受阻声音">
+				<span class="demo-btn-icon" aria-hidden="true">
+					<svg width="18" height="18" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"/></svg>
+				</span>
+				⚠ 受阻
+			</button>
+			<button type="button" class="demo-btn" data-sound="error" aria-label="播放错误声音">
+				<span class="demo-btn-icon" aria-hidden="true">
+					<svg width="18" height="18" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg>
+				</span>
+				✗ 错误
+			</button>
+		</div>
+		<p class="demo-status" id="demo-status" role="status" aria-live="polite">任务已完成</p>
+	</section>
+
+	<!-- ============ Sound cards ============ -->
+	<section class="cards" aria-labelledby="cards-heading">
+		<h2 id="cards-heading">声音库</h2>
+		<div class="cards-grid">
+
+			<article class="card" data-card="done">
+				<div class="card-head">
+					<span class="card-icon" aria-hidden="true">
+						<svg width="26" height="26" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M173.66,98.34a8,8,0,0,1,0,11.32l-56,56a8,8,0,0,1-11.32,0l-24-24a8,8,0,0,1,11.32-11.32L112,148.69l50.34-50.35A8,8,0,0,1,173.66,98.34ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg>
+					</span>
+					<div>
+						<h3 class="card-event">完成</h3>
+						<p class="card-sound">语义声音：<code>done</code></p>
+					</div>
+				</div>
+				<p class="card-meta">来源：react-sounds — <span class="rs-name">ui/success_bling</span></p>
+				<p class="card-meta">文件：<code>sounds/done.wav</code> · 0.81s</p>
+				<div class="card-controls">
+					<button type="button" class="play-btn" data-play="done" aria-label="播放完成声音">
+						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">播放</span>
+					</button>
+					<div class="progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+						<div class="progress-fill"></div>
+					</div>
+					<span class="card-time" aria-hidden="true">0.0 / 0.8s</span>
+				</div>
+				<div class="volume-row">
+					<label class="volume-label" for="vol-done">音量</label>
+					<input type="range" id="vol-done" class="volume" min="0" max="100" value="100" aria-label="完成声音的音量">
+				</div>
+				<audio class="card-audio" data-audio="done" src="sounds/done.wav" preload="none"></audio>
+			</article>
+
+			<article class="card" data-card="permission">
+				<div class="card-head">
+					<span class="card-icon" aria-hidden="true">
+						<svg width="26" height="26" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M208,80H176V56a48,48,0,0,0-96,0V80H48A16,16,0,0,0,32,96V208a16,16,0,0,0,16,16H208a16,16,0,0,0,16-16V96A16,16,0,0,0,208,80ZM96,56a32,32,0,0,1,64,0V80H96ZM208,208H48V96H208V208Zm-68-56a12,12,0,1,1-12-12A12,12,0,0,1,140,152Z"/></svg>
+					</span>
+					<div>
+						<h3 class="card-event">审批</h3>
+						<p class="card-sound">语义声音：<code>permission</code></p>
+					</div>
+				</div>
+				<p class="card-meta">来源：react-sounds — <span class="rs-name">notification/notification</span></p>
+				<p class="card-meta">文件：<code>sounds/permission.wav</code> · 0.86s</p>
+				<div class="card-controls">
+					<button type="button" class="play-btn" data-play="permission" aria-label="播放审批声音">
+						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">播放</span>
+					</button>
+					<div class="progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+						<div class="progress-fill"></div>
+					</div>
+					<span class="card-time" aria-hidden="true">0.0 / 0.9s</span>
+				</div>
+				<div class="volume-row">
+					<label class="volume-label" for="vol-permission">音量</label>
+					<input type="range" id="vol-permission" class="volume" min="0" max="100" value="100" aria-label="审批声音的音量">
+				</div>
+				<audio class="card-audio" data-audio="permission" src="sounds/permission.wav" preload="none"></audio>
+			</article>
+
+			<article class="card" data-card="question">
+				<div class="card-head">
+					<span class="card-icon" aria-hidden="true">
+						<svg width="26" height="26" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M140,180a12,12,0,1,1-12-12A12,12,0,0,1,140,180ZM128,72c-22.06,0-40,16.15-40,36v4a8,8,0,0,0,16,0v-4c0-11,10.77-20,24-20s24,9,24,20-10.77,20-24,20a8,8,0,0,0-8,8v8a8,8,0,0,0,16,0v-.72c18.24-3.35,32-17.9,32-35.28C168,88.15,150.06,72,128,72Zm104,56A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg>
+					</span>
+					<div>
+						<h3 class="card-event">提问</h3>
+						<p class="card-sound">语义声音：<code>question</code></p>
+					</div>
+				</div>
+				<p class="card-meta">来源：react-sounds — <span class="rs-name">notification/info</span></p>
+				<p class="card-meta">文件：<code>sounds/question.wav</code> · 0.86s</p>
+				<div class="card-controls">
+					<button type="button" class="play-btn" data-play="question" aria-label="播放提问声音">
+						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">播放</span>
+					</button>
+					<div class="progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+						<div class="progress-fill"></div>
+					</div>
+					<span class="card-time" aria-hidden="true">0.0 / 0.9s</span>
+				</div>
+				<div class="volume-row">
+					<label class="volume-label" for="vol-question">音量</label>
+					<input type="range" id="vol-question" class="volume" min="0" max="100" value="100" aria-label="提问声音的音量">
+				</div>
+				<audio class="card-audio" data-audio="question" src="sounds/question.wav" preload="none"></audio>
+			</article>
+
+			<article class="card" data-card="block">
+				<div class="card-head">
+					<span class="card-icon" aria-hidden="true">
+						<svg width="26" height="26" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M236.8,188.09,149.35,36.22h0a24.76,24.76,0,0,0-42.7,0L19.2,188.09a23.51,23.51,0,0,0,0,23.72A24.35,24.35,0,0,0,40.55,224h174.9a24.35,24.35,0,0,0,21.33-12.19A23.51,23.51,0,0,0,236.8,188.09ZM222.93,203.8a8.5,8.5,0,0,1-7.48,4.2H40.55a8.5,8.5,0,0,1-7.48-4.2,7.59,7.59,0,0,1,0-7.72L120.52,44.21a8.75,8.75,0,0,1,15,0l87.45,151.87A7.59,7.59,0,0,1,222.93,203.8ZM120,144V104a8,8,0,0,1,16,0v40a8,8,0,0,1-16,0Zm20,36a12,12,0,1,1-12-12A12,12,0,0,1,140,180Z"/></svg>
+					</span>
+					<div>
+						<h3 class="card-event">受阻</h3>
+						<p class="card-sound">语义声音：<code>block</code></p>
+					</div>
+				</div>
+				<p class="card-meta">来源：react-sounds — <span class="rs-name">ui/blocked</span></p>
+				<p class="card-meta">文件：<code>sounds/block.wav</code> · 0.94s</p>
+				<div class="card-controls">
+					<button type="button" class="play-btn" data-play="block" aria-label="播放受阻声音">
+						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">播放</span>
+					</button>
+					<div class="progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+						<div class="progress-fill"></div>
+					</div>
+					<span class="card-time" aria-hidden="true">0.0 / 0.9s</span>
+				</div>
+				<div class="volume-row">
+					<label class="volume-label" for="vol-block">音量</label>
+					<input type="range" id="vol-block" class="volume" min="0" max="100" value="100" aria-label="受阻声音的音量">
+				</div>
+				<audio class="card-audio" data-audio="block" src="sounds/block.wav" preload="none"></audio>
+			</article>
+
+			<article class="card" data-card="error">
+				<div class="card-head">
+					<span class="card-icon" aria-hidden="true">
+						<svg width="26" height="26" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path fill="currentColor" d="M165.66,101.66,139.31,128l26.35,26.34a8,8,0,0,1-11.32,11.32L128,139.31l-26.34,26.35a8,8,0,0,1-11.32-11.32L116.69,128,90.34,101.66a8,8,0,0,1,11.32-11.32L128,116.69l26.34-26.35a8,8,0,0,1,11.32,11.32ZM232,128A104,104,0,1,1,128,24,104.11,104.11,0,0,1,232,128Zm-16,0a88,88,0,1,0-88,88A88.1,88.1,0,0,0,216,128Z"/></svg>
+					</span>
+					<div>
+						<h3 class="card-event">错误</h3>
+						<p class="card-sound">语义声音：<code>error</code></p>
+					</div>
+				</div>
+				<p class="card-meta">来源：react-sounds — <span class="rs-name">notification/error</span></p>
+				<p class="card-meta">文件：<code>sounds/error.wav</code> · 0.55s</p>
+				<div class="card-controls">
+					<button type="button" class="play-btn" data-play="error" aria-label="播放错误声音">
+						<span class="play-glyph" aria-hidden="true"><svg width="15" height="15" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg"><path class="play-path" fill="currentColor" d="M232.4,114.49,88.32,26.35a16,16,0,0,0-16.2-.3A15.86,15.86,0,0,0,64,39.87V216.13A15.94,15.94,0,0,0,80,232a16.07,16.07,0,0,0,8.36-2.35L232.4,141.51a15.81,15.81,0,0,0,0-27ZM80,215.94V40l143.83,88Z"/><path class="pause-path" fill="currentColor" d="M200,32H160a16,16,0,0,0-16,16V208a16,16,0,0,0,16,16h40a16,16,0,0,0,16-16V48A16,16,0,0,0,200,32Zm0,176H160V48h40ZM96,32H56A16,16,0,0,0,40,48V208a16,16,0,0,0,16,16H96a16,16,0,0,0,16-16V48A16,16,0,0,0,96,32Zm0,176H56V48H96Z"/></svg></span><span class="play-text">播放</span>
+					</button>
+					<div class="progress" role="progressbar" aria-label="Playback progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0">
+						<div class="progress-fill"></div>
+					</div>
+					<span class="card-time" aria-hidden="true">0.0 / 0.6s</span>
+				</div>
+				<div class="volume-row">
+					<label class="volume-label" for="vol-error">音量</label>
+					<input type="range" id="vol-error" class="volume" min="0" max="100" value="100" aria-label="错误声音的音量">
+				</div>
+				<audio class="card-audio" data-audio="error" src="sounds/error.wav" preload="none"></audio>
+			</article>
+
+		</div>
+	</section>
+
+	<!-- ============ Sound design ============ -->
+	<section class="notes" aria-labelledby="notes-heading">
+		<h2 id="notes-heading">声音设计</h2>
+		<p>每种通知事件都有独立的声音语义，而不是通过重复播放提示音的次数来区分事件。</p>
+		<ul class="notes-list">
+			<li><code>done</code> — 正常完成</li>
+			<li><code>permission</code> — 需要审批（等待人工操作）</li>
+			<li><code>question</code> — Agent 正在等待你的回答</li>
+			<li><code>block</code> — 目标受阻，无法继续</li>
+			<li><code>error</code> — 发生了错误</li>
+		</ul>
+		<p class="notes-src">
+			声音素材来自
+			<a href="https://github.com/aediliclabs/react-sounds" target="_blank" rel="noopener">react-sounds</a>。
+			仅使用上述五种声音；本页为独立展示页，与 react-sounds 无关联。
+		</p>
+	</section>
+</main>
+
+<footer class="site-footer">
+	<p>DSH Notify Bell · v0.10.0 · <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" rel="noopener">DeepSeek Harness</a> 语义化通知声音</p>
+	<p class="footer-credits">图标：<a href="https://phosphoricons.com/" target="_blank" rel="noopener">Phosphor Icons</a>（MIT License）</p>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
