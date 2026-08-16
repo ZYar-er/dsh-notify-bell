@@ -59,7 +59,7 @@
  *   warn（warning 输出）、write（stdout 写入）、isTTY（TTY 判断）、
  *   maxDedupeKeys（每个去重容器的上限，默认 1000）。
  */
-import { loadConfig, writeEnabled, mergeConfig } from './config.js';
+import { loadConfig, writeEnabled, writePlayback, mergeConfig, VALID_PLAYBACKS } from './config.js';
 import { createBellBackend } from './bell.js';
 import { createWavBackend } from './wav.js';
 import { createLogBackend } from './log.js';
@@ -88,8 +88,15 @@ export function apply(ctx, config = {}, options = {}) {
 	// 合并层：Cordis 显式字段 > legacy 文件 > schema 默认（见 config.js）。
 	config = mergeConfig(config, fileConfig);
 	const persistEnabled = options.writeEnabled ?? writeEnabled;
+	const persistPlayback = options.writePlayback ?? writePlayback;
 	/** 运行时 enabled 状态（Web 开关可立即改变，无需重启）。 */
 	let enabled = config.enabled;
+	/**
+	 * 运行时 playback 状态（Web 选择器可立即改变，无需重启）：
+	 * 'browser' → SSE 推送、浏览器播放；'backend' → 本机播放；
+	 * 'none' → 只日志，两端都不播放。
+	 */
+	let playback = config.playback;
 	const backendOptions = {
 		gapMs: config.bell.gapMs,
 		permissionGapMs: config.bell.permissionGapMs,
@@ -117,13 +124,16 @@ export function apply(ctx, config = {}, options = {}) {
 	if (typeof ctx.effect === 'function') ctx.effect(() => () => sse.dispose(), 'notify-bell sse hub');
 
 	/**
-	 * 通知输出分流：playback=browser → SSE 推送 { sound }；
-	 * 否则 → 本地 backend（BEL/WAV）播放。
+	 * 通知输出分流（playback 运行时可变）：
+	 *   - 'browser' → SSE 推送 { sound }，浏览器播放，后端不播；
+	 *   - 'backend' → 本地 backend（BEL/WAV）播放，浏览器不播；
+	 *   - 'none'    → 只保留日志，不推送也不播放。
 	 * 事件分类/去重/enabled 门控都在调用前完成（admit），这里只负责"响"。
 	 */
 	const notify = (sound) => {
-		if (config.playback === 'browser') sse.broadcast({ sound });
-		else backend.play(sound);
+		if (playback === 'browser') sse.broadcast({ sound });
+		else if (playback === 'backend') backend.play(sound);
+		// 'none'：什么都不做（日志在调用方已输出）。
 	};
 	const log = createLogBackend({
 		maxLength: config.objective.maxLength,
@@ -161,6 +171,15 @@ export function apply(ctx, config = {}, options = {}) {
 		enabled = next;
 	};
 
+	/** 运行时播放方式：先持久化（失败抛错、状态不变），成功后才更新运行时状态。 */
+	const setPlayback = (next) => {
+		if (typeof next !== 'string' || !VALID_PLAYBACKS.includes(next)) {
+			throw new Error(`invalid playback: ${String(next)}`);
+		}
+		persistPlayback(path, next);
+		playback = next;
+	};
+
 	/** 去重 + enabled 门控；返回是否允许本次通知。 */
 	const admit = (classified) => {
 		if (!enabled) return false;
@@ -181,8 +200,9 @@ export function apply(ctx, config = {}, options = {}) {
 	};
 
 	// Web → backend 开关 HTTP API（由 dsh-notify-bell 自己暴露，不修改 DSH 核心）。
-	// GET  /notify-bell                 → { ok, value: { enabled }, version }
+	// GET  /notify-bell                 → { ok, value: { enabled, playback }, version }
 	// POST /notify-bell/setEnabled      → body { enabled } → 持久化 + 运行时生效
+	// POST /notify-bell/setPlayback     → body { playback } → 持久化 + 运行时生效
 	// POST /notify-bell/toggle          → 翻转 enabled
 	// GET  /notify-bell/events          → SSE（playback=browser 的推送通道）
 	// GET  /notify-bell/sounds/<name>.wav → 静态声音素材（sound-showcase/sounds）
@@ -231,7 +251,7 @@ export function apply(ctx, config = {}, options = {}) {
 						// ready 帧快照当前运行时状态；心跳立即开始，避免 idle 断连。
 						sse.attach(req, res, {
 							enabled,
-							playback: config.playback,
+							playback,
 							soundPack: config.soundPack,
 							version: PLUGIN_VERSION
 						});
@@ -243,7 +263,7 @@ export function apply(ctx, config = {}, options = {}) {
 						return serveSound(endpoint.slice('sounds/'.length), res);
 					}
 					if (endpoint === 'getEnabled') {
-						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
+						return json(res, 200, { ok: true, value: { enabled, playback }, version: PLUGIN_VERSION });
 					}
 					if (req.method !== 'POST') {
 						return json(res, 405, { ok: false, error: { code: 'method-not-allowed', message: 'use POST' } });
@@ -257,11 +277,18 @@ export function apply(ctx, config = {}, options = {}) {
 					if (endpoint === 'setEnabled') {
 						if (typeof args.enabled !== 'boolean') return json(res, 400, { ok: false, error: { code: 'bad-request', message: 'enabled must be a boolean' } });
 						setEnabled(args.enabled);
-						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
+						return json(res, 200, { ok: true, value: { enabled, playback }, version: PLUGIN_VERSION });
+					}
+					if (endpoint === 'setPlayback') {
+						if (typeof args.playback !== 'string' || !VALID_PLAYBACKS.includes(args.playback)) {
+							return json(res, 400, { ok: false, error: { code: 'bad-request', message: 'playback must be browser | backend | none' } });
+						}
+						setPlayback(args.playback);
+						return json(res, 200, { ok: true, value: { enabled, playback }, version: PLUGIN_VERSION });
 					}
 					if (endpoint === 'toggle') {
 						setEnabled(!enabled);
-						return json(res, 200, { ok: true, value: { enabled }, version: PLUGIN_VERSION });
+						return json(res, 200, { ok: true, value: { enabled, playback }, version: PLUGIN_VERSION });
 					}
 					return json(res, 404, { ok: false, error: { code: 'not-found', message: `unknown endpoint ${endpoint}` } });
 				} catch (error) {

@@ -88,6 +88,12 @@ let tty = true;
 function setup(configObj) {
 	const dir = mkdtempSync(join(tmpdir(), 'notify-bell-'));
 	const file = join(dir, 'config.json');
+	// 夹具固定 playback='backend'（生产默认是 'browser'）：行为测试聚焦
+	// 分类/去重/日志/本地播放，与 playback 三模式解耦；browser/none 的
+	// 完整行为由 F/H 组显式配置覆盖。显式指定 playback 的用例不受影响。
+	if (configObj !== null && typeof configObj === 'object' && !Array.isArray(configObj) && configObj.playback === undefined) {
+		configObj = { ...configObj, playback: 'backend' };
+	}
 	if (configObj !== null) writeFileSync(file, typeof configObj === 'string' ? configObj : JSON.stringify(configObj));
 	const writes = []; // { t, c }
 	const warns = [];
@@ -1239,9 +1245,10 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	const s = setupWithWeb({ enabled: true, bell: { gapMs: GAP, permissionGapMs: GAP } });
 	const r = await s.call('getEnabled', undefined, 'GET');
 	check(r.ok === true && r.value.enabled === true, 'Y4 getEnabled', r);
+	check(typeof r.value.playback === 'string' && ['browser', 'backend', 'none'].includes(r.value.playback), 'Y4 playback present', r.value.playback);
 	check(typeof r.version === 'string' && r.version === PLUGIN_VERSION && PLUGIN_VERSION.length > 0, 'Y4 version present', r.version);
 	rmSync(s.dir, { recursive: true, force: true });
-	report('Y4: HTTP getEnabled + version ✓');
+	report('Y4: HTTP getEnabled + playback + version ✓');
 }
 
 // Y5: setEnabled(false) → 持久化 + 同一实例立即生效（integration）
@@ -1312,12 +1319,12 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 		throw new Error('unexpected require: ' + name);
 	});
 
-	// Y9: bellView 纯函数（图标/文案/title/aria）
+	// Y9: bellView 纯函数（图标/文案/title/aria；按钮现打开设置 popover）
 	const { bellView } = loaded;
 	const on = bellView(true);
-	check(on.icon === 'bell' && on.label === 'Disable notifications' && on.title === 'Disable notifications' && on.pressed === true, 'Y9 enabled view', on);
+	check(on.icon === 'bell' && on.label === 'Notification settings' && on.title === 'Notification settings' && on.pressed === true, 'Y9 enabled view', on);
 	const off = bellView(false);
-	check(off.icon === 'bell-slash' && off.label === 'Enable notifications' && off.title === 'Enable notifications' && off.pressed === false, 'Y9 disabled view', off);
+	check(off.icon === 'bell-slash' && off.label === 'Notification settings' && off.title === 'Notification settings' && off.pressed === false, 'Y9 disabled view', off);
 	const err = bellView(true, true);
 	check(err.title === 'Failed to update notifications setting', 'Y9 error title', err);
 	const loading = bellView(null);
@@ -1367,6 +1374,81 @@ function setupWithWeb(configObj, rpcOptions = {}) {
 	check(!/\.\//.test(source), 'Y12 no relative imports', 'client.js');
 	check(source.includes('require("react")'), 'Y12 require react', 'client.js');
 	report('Y12: client.js 打包格式 ✓');
+
+	// U1: playback 选项顺序（Browser → Backend → None）
+	const { playbackOptions } = loaded;
+	check(
+		Array.isArray(playbackOptions) && playbackOptions.map((o) => o.value).join(',') === 'browser,backend,none',
+		'U1 playback options order',
+		playbackOptions.map((o) => o.value).join(',')
+	);
+
+	// U2: settingsView —— 三种 playback 的 radio 选中态 + 开关文案
+	const { settingsView } = loaded;
+	const viewBrowser = settingsView(true, 'browser', 'en', false);
+	check(
+		viewBrowser.playbacks.filter((p) => p.checked).map((p) => p.value).join(',') === 'browser',
+		'U2 browser selected',
+		viewBrowser.playbacks
+	);
+	const viewBackend = settingsView(true, 'backend', 'en', false);
+	check(viewBackend.playbacks.filter((p) => p.checked)[0]?.value === 'backend', 'U2 backend selected', viewBackend.playbacks);
+	const viewNone = settingsView(true, 'none', 'en', false);
+	check(viewNone.playbacks.filter((p) => p.checked)[0]?.value === 'none', 'U2 none selected', viewNone.playbacks);
+	check(viewBrowser.enabledOn === true && viewBrowser.switchLabel === 'On', 'U2 switch on', viewBrowser);
+	const viewOff = settingsView(false, 'browser', 'en', false);
+	check(viewOff.enabledOn === false && viewOff.switchLabel === 'Off' && viewOff.bellIcon === 'bell-slash', 'U2 switch off + bell-slash', viewOff);
+	// enabled 与 playback 独立：playback=none 时 bell 仍是 bell
+	const viewNoneOn = settingsView(true, 'none', 'en', false);
+	check(viewNoneOn.bellIcon === 'bell', 'U2 bell icon independent of playback', viewNoneOn);
+	report('U1-U2: playback 选项 + settingsView 选中态 ✓');
+
+	// U3: settingsView 未加载状态（不假设默认值）+ 错误提示
+	const viewLoading = settingsView(null, null, 'en', false);
+	check(viewLoading.enabledReady === false && viewLoading.playbackReady === false, 'U3 loading state', viewLoading);
+	const viewErr = settingsView(true, 'browser', 'en', true);
+	check(viewErr.errorText === 'Failed to update settings', 'U3 error text', viewErr);
+	const viewErrZh = settingsView(true, 'browser', 'zh', true);
+	check(viewErrZh.errorText === '设置更新失败', 'U3 zh error text', viewErrZh);
+	report('U3: settingsView 加载/错误状态 ✓');
+
+	// U4: detectLang —— html lang 优先，navigator 兜底
+	const { detectLang } = loaded;
+	check(detectLang('zh-CN', 'en-US') === 'zh', 'U4 html zh', detectLang('zh-CN', 'en-US'));
+	check(detectLang('en', 'zh-CN') === 'en', 'U4 html en wins', detectLang('en', 'zh-CN'));
+	check(detectLang('', 'zh-CN') === 'zh', 'U4 navigator zh', detectLang('', 'zh-CN'));
+	check(detectLang('', 'en-US') === 'en', 'U4 fallback en', detectLang('', 'en-US'));
+	report('U4: detectLang ✓');
+
+	// U5: Escape 关闭判定
+	const { closeOnEscape } = loaded;
+	check(closeOnEscape(true, 'Escape') === true, 'U5 escape closes', closeOnEscape(true, 'Escape'));
+	check(closeOnEscape(true, 'Enter') === false, 'U5 other key stays', closeOnEscape(true, 'Enter'));
+	check(closeOnEscape(false, 'Escape') === false, 'U5 closed ignores', closeOnEscape(false, 'Escape'));
+	report('U5: Escape 关闭 ✓');
+
+	// U6: 外部点击关闭判定
+	const { closeOnOutside } = loaded;
+	const button = { contains: (t) => t === 'in-button' };
+	const popover = { contains: (t) => t === 'in-popover' };
+	check(closeOnOutside(true, { nodeType: 1, id: 'outside' }, button, popover) === true, 'U6 outside closes');
+	check(closeOnOutside(true, 'in-button', button, popover) === false, 'U6 button click stays', closeOnOutside(true, 'in-button', button, popover));
+	check(closeOnOutside(true, 'in-popover', button, popover) === false, 'U6 popover click stays', closeOnOutside(true, 'in-popover', button, popover));
+	check(closeOnOutside(false, { nodeType: 1 }, button, popover) === false, 'U6 closed ignores', closeOnOutside(false, { nodeType: 1 }, button, popover));
+	report('U6: 外部点击关闭 ✓');
+
+	// U7: Popover 主题 —— 全语义 token（无硬编码颜色）
+	const { POPOVER_CSS } = loaded;
+	check(typeof POPOVER_CSS === 'string' && POPOVER_CSS.includes('--dsw-alias-bg-overlay') && POPOVER_CSS.includes('--dsw-alias-brand-primary'), 'U7 semantic tokens', POPOVER_CSS.slice(0, 60));
+	check(!/#[0-9a-fA-F]{3,8}/.test(POPOVER_CSS), 'U7 no hard-coded colors', POPOVER_CSS.match(/#[0-9a-fA-F]{3,8}/));
+	check(POPOVER_CSS.includes('role="dialog"') === false && POPOVER_CSS.includes('.nb-popover'), 'U7 popover css present', 'ok');
+	report('U7: Popover 主题 token ✓');
+
+	// U8: 中英文案键完整
+	const { SETTINGS_I18N } = loaded;
+	const keys = ['notifications', 'on', 'off', 'playback', 'browser', 'backend', 'none', 'failed'];
+	check(keys.every((k) => typeof SETTINGS_I18N.en?.[k] === 'string' && typeof SETTINGS_I18N.zh?.[k] === 'string'), 'U8 i18n keys complete', Object.keys(SETTINGS_I18N.en ?? {}).join(','));
+	report('U8: 中英文案 ✓');
 
 	delete globalThis.window;
 	delete globalThis.document;
@@ -2742,6 +2824,112 @@ const makeFakeFetch = () => {
 	player.dispose();
 	check(removed === true, 'G7 listeners removed', removed);
 	report('G7: dispose 清理 ✓');
+}
+
+// ---------- H: playback 设置 API（Web Playback Selector 后端） ----------
+// H1: 默认 playback=browser（DEFAULT_CONFIG / sanitize / schema）
+{
+	check(DEFAULT_CONFIG.playback === 'browser', 'H1 default playback browser', DEFAULT_CONFIG.playback);
+	check(sanitizeConfig({}).playback === 'browser', 'H1 sanitize default browser', sanitizeConfig({}).playback);
+	check(sanitizeConfig({ playback: 'none' }).playback === 'none', 'H1 sanitize none', sanitizeConfig({ playback: 'none' }).playback);
+	check(sanitizeConfig({ playback: 'invalid' }).playback === 'browser', 'H1 sanitize invalid falls back', sanitizeConfig({ playback: 'invalid' }).playback);
+	report('H1: 默认 playback=browser ✓');
+}
+
+// H2: setPlayback 三值 API 往返 + 响应字段
+{
+	const s = setupWithWeb({ enabled: true, playback: 'browser', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	const g = await s.call('getEnabled', undefined, 'GET');
+	check(g.ok && g.value.playback === 'browser', 'H2 GET initial', g);
+	for (const value of ['backend', 'none', 'browser']) {
+		const r = await s.call('setPlayback', { playback: value });
+		check(r.ok && r.value.playback === value && typeof r.version === 'string', `H2 setPlayback ${value}`, r);
+		const after = await s.call('getEnabled', undefined, 'GET');
+		check(after.value.playback === value, `H2 GET after ${value}`, after.value);
+	}
+	rmSync(s.dir, { recursive: true, force: true });
+	report('H2: setPlayback 三值往返 ✓');
+}
+
+// H3: 非法 playback → 400 + 状态与文件不变
+{
+	const s = setupWithWeb({ enabled: true, playback: 'browser', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	const r = await s.call('setPlayback', { playback: 'both' });
+	check(r.ok === false && r.error.code === 'bad-request', 'H3 bad request', r);
+	const after = await s.call('getEnabled', undefined, 'GET');
+	check(after.value.playback === 'browser', 'H3 runtime unchanged', after);
+	const cfg = JSON.parse(readFileSync(s.file, 'utf8'));
+	check(cfg.playback === 'browser', 'H3 file unchanged', cfg.playback);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('H3: 非法 playback 拒绝 ✓');
+}
+
+// H4: setPlayback 持久化保留其他配置字段
+{
+	const s = setupWithWeb({ enabled: true, playback: 'browser', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	await s.call('setPlayback', { playback: 'none' });
+	const cfg = JSON.parse(readFileSync(s.file, 'utf8'));
+	check(cfg.playback === 'none', 'H4 playback persisted', cfg.playback);
+	check(cfg.enabled === true && cfg.bell?.gapMs === GAP && cfg.bell?.permissionGapMs === GAP, 'H4 other fields kept', cfg);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('H4: setPlayback 持久化保留其他字段 ✓');
+}
+
+// H5: runtime 立即生效（backend → BEL / browser → SSE / none → 全静默）
+{
+	const s = setupWithWeb({ enabled: true, playback: 'backend', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	// 初始 backend：complete → BEL
+	completeTurn(s, 1);
+	await sleep(GAP * 2 + 20);
+	check(s.bells().length === 1, 'H5 backend BEL', s.bells().length);
+	// 切 browser（先建 SSE 连接）：complete → SSE 帧，BEL 不新增
+	const sseRes = new FakeRes();
+	await s.route.handler({ method: 'GET', url: '/notify-bell/events' }, sseRes);
+	await s.call('setPlayback', { playback: 'browser' });
+	completeTurn(s, 2);
+	await sleep(GAP * 2 + 20);
+	check(sseRes.text.includes('event: notify\ndata: {"sound":"done"}'), 'H5 browser sse', sseRes.text);
+	check(s.bells().length === 1, 'H5 browser no BEL', s.bells().length);
+	// 切 none：complete → 无新帧无新 BEL（只有日志）
+	const notifyCountBefore = (sseRes.text.match(/event: notify/g) ?? []).length;
+	const logCountBefore = s.logLines().length;
+	await s.call('setPlayback', { playback: 'none' });
+	completeTurn(s, 3);
+	await sleep(GAP * 2 + 20);
+	check((sseRes.text.match(/event: notify/g) ?? []).length === notifyCountBefore, 'H5 none no sse', sseRes.text.slice(-200));
+	check(s.bells().length === 1, 'H5 none no BEL', s.bells().length);
+	check(s.logLines().length === logCountBefore + 1, 'H5 none keeps log', s.logLines().slice(-2));
+	rmSync(s.dir, { recursive: true, force: true });
+	report('H5: playback 运行时立即生效（三模式）✓');
+}
+
+// H6: enabled 与 playback 相互独立
+{
+	const s = setupWithWeb({ enabled: true, playback: 'browser', bell: { gapMs: GAP, permissionGapMs: GAP } });
+	await s.call('setEnabled', { enabled: false });
+	let g = await s.call('getEnabled', undefined, 'GET');
+	check(g.value.enabled === false && g.value.playback === 'browser', 'H6 enabled off keeps playback', g.value);
+	await s.call('setPlayback', { playback: 'none' });
+	g = await s.call('getEnabled', undefined, 'GET');
+	check(g.value.enabled === false && g.value.playback === 'none', 'H6 playback change keeps enabled', g.value);
+	await s.call('setEnabled', { enabled: true });
+	g = await s.call('getEnabled', undefined, 'GET');
+	check(g.value.enabled === true && g.value.playback === 'none', 'H6 re-enable keeps playback', g.value);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('H6: enabled 与 playback 独立 ✓');
+}
+
+// H7: setPlayback 写失败 → 500 + 运行时状态不变（UI 回滚依据）
+{
+	const s = setupWithWeb({ enabled: true, playback: 'browser', bell: { gapMs: GAP, permissionGapMs: GAP } }, {
+		writePlayback: () => { throw new Error('disk full'); }
+	});
+	const r = await s.call('setPlayback', { playback: 'backend' });
+	check(r.ok === false && r.error.code === 'write-failed', 'H7 write failed', r);
+	const after = await s.call('getEnabled', undefined, 'GET');
+	check(after.value.playback === 'browser', 'H7 runtime unchanged on failure', after);
+	rmSync(s.dir, { recursive: true, force: true });
+	report('H7: 写失败 → 运行时不变（UI 回滚一致）✓');
 }
 
 if (!failed) report('ALL TESTS PASSED');

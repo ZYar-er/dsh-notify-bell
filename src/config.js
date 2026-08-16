@@ -50,11 +50,12 @@ const BELL_COUNT_TO_SOUND = Object.freeze({
 export const VALID_SOUND_PACKS = Object.freeze(['default', 'wav']);
 
 /**
- * 已实现的 playback：'backend' → 本机终端播放（BEL/WAV）；
- * 'browser' → 后端只经 SSE 推送 semantic sound，浏览器播放
- * （实验阶段；事件分类始终在后端，浏览器不复制分类逻辑）。
+ * 已实现的 playback：'browser' → SSE 推送给浏览器播放；'backend' →
+ * 本机终端播放（BEL/WAV）；'none' → 只留日志，两端都不播放。
+ * 事件分类始终在后端，浏览器不复制分类逻辑。默认 browser
+ * （面向 DSH Web 用户的主要体验）。
  */
-export const VALID_PLAYBACKS = Object.freeze(['backend', 'browser']);
+export const VALID_PLAYBACKS = Object.freeze(['browser', 'backend', 'none']);
 
 /** WAV backend 的 fallback 策略（当前仅支持回退到 BEL）。 */
 const VALID_WAV_FALLBACKS = Object.freeze(['bell']);
@@ -77,7 +78,7 @@ export const DEFAULT_CONFIG = Object.freeze({
 		error: Object.freeze({ enabled: true, sound: 'error' })
 	}),
 	soundPack: 'default',
-	playback: 'backend',
+	playback: 'browser',
 	wav: Object.freeze({
 		directory: '~/.config/dsh/notify-bell/sounds',
 		fallback: 'bell'
@@ -116,7 +117,7 @@ export const Config = Schema.object({
 		error: eventSchema('error')
 	}),
 	soundPack: Schema.union([...VALID_SOUND_PACKS]).default('default'),
-	playback: Schema.union([...VALID_PLAYBACKS]).default('backend'),
+	playback: Schema.union([...VALID_PLAYBACKS]).default('browser'),
 	wav: Schema.object({
 		directory: Schema.string().default('~/.config/dsh/notify-bell/sounds'),
 		fallback: Schema.union([...VALID_WAV_FALLBACKS]).default('bell')
@@ -269,15 +270,16 @@ export function loadConfig(options = {}) {
 }
 
 /**
- * 原子更新配置文件的 `enabled` 字段（保留其他所有字段）。
- * - 文件不存在 → 以最小结构创建（{ enabled }）。
+ * 原子更新配置文件的一个顶层字段（保留其他所有字段）。
+ * - 文件不存在 → 以最小结构创建（{ [field]: value }）。
  * - 文件是非法 JSON → 抛错且不改动原文件（Web UI 据此回滚，不崩溃）。
  * - 写入方式：同目录临时文件 + rename（原子替换）。
  * @param configPath - 配置文件路径。
- * @param enabled - 新的 enabled 布尔值。
+ * @param field - 顶层字段名。
+ * @param value - 新值。
  * @throws 当原文件存在但 JSON 非法，或写入/替换失败时。
  */
-export function writeEnabled(configPath, enabled) {
+export function writeField(configPath, field, value) {
 	let cfg = {};
 	try {
 		cfg = JSON.parse(readFileSync(configPath, 'utf8'));
@@ -286,7 +288,7 @@ export function writeEnabled(configPath, enabled) {
 			throw new Error(`notify-bell config ${configPath} is not valid JSON: ${error.message}`);
 		}
 	}
-	cfg.enabled = enabled;
+	cfg[field] = value;
 	mkdirSync(dirname(configPath), { recursive: true });
 	const tmp = `${configPath}.tmp-${process.pid}-${Date.now()}`;
 	writeFileSync(tmp, `${JSON.stringify(cfg, null, 2)}\n`);
@@ -299,4 +301,14 @@ export function writeEnabled(configPath, enabled) {
 			throw error;
 		}
 	}
+}
+
+/** 原子更新 `enabled` 字段（Web 通知开关）。 */
+export function writeEnabled(configPath, enabled) {
+	writeField(configPath, 'enabled', enabled);
+}
+
+/** 原子更新 `playback` 字段（Web 播放方式选择器）。 */
+export function writePlayback(configPath, playback) {
+	writeField(configPath, 'playback', playback);
 }

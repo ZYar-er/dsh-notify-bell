@@ -172,7 +172,7 @@ Example file:
     }
   },
   "soundPack": "wav",
-  "playback": "backend",
+  "playback": "browser",
   "wav": {
     "directory": "~/.config/dsh/notify-bell/sounds",
     "fallback": "bell"
@@ -184,21 +184,24 @@ Example file:
 }
 ```
 
-### Playback location (experimental)
+### Playback location
 
 `playback` chooses where the notification sound is played
-(`soundPack` stays the sound-material source):
+(`soundPack` stays the sound-material source). The default is
+`browser`; you can also change it at runtime from the bell popover in
+the DSH Web UI (no restart needed):
 
-- `backend` (default): the host plays the sound (BEL or WAV via
-  `soundPack`), same as before.
-- `browser`: the backend still classifies events and writes logs, but
-  plays nothing locally. It pushes the semantic sound over
-  Server-Sent Events (`GET /notify-bell/events`), and the DSH Web UI
-  plays the matching WAV (`/notify-bell/sounds/*.wav`, served from the
-  package's `sound-showcase/sounds`). The browser plays exactly one
-  sound per notification.
+- `browser`: the backend classifies events and writes logs, but plays
+  nothing locally. It pushes the semantic sound over Server-Sent
+  Events (`GET /notify-bell/events`), and the DSH Web UI plays the
+  matching WAV (`/notify-bell/sounds/*.wav`, served from the package's
+  `sound-showcase/sounds`). One sound per notification.
+- `backend`: the host plays the sound (BEL or WAV via `soundPack`);
+  the browser stays silent.
+- `none`: logs only — nothing is pushed to the browser and no local
+  audio is played.
 
-Experimental notes (this stage):
+Browser notes:
 
 - The browser uses Web Audio; autoplay policy requires one user
   gesture (`pointerdown`/`keydown`) before the first sound. Until then
@@ -206,7 +209,8 @@ Experimental notes (this stage):
   console (`console.debug`), never thrown.
 - No `both`, no backend fallback, no multi-tab coordination yet.
 - `enabled=false` still silences everything: the backend pushes
-  nothing and the browser plays nothing.
+  nothing and the browser plays nothing. `enabled` and `playback` are
+  independent settings.
 
 ### Completion threshold
 
@@ -227,25 +231,22 @@ When disabled:
 
 ## Web UI
 
-A notification button is added next to **Session log**:
+A notification button (bell) is added next to **Session log**:
 
 ```text
 Session log   🔔
 ```
 
-When enabled:
+Clicking the bell opens a compact notification settings popover:
 
-```text
-bell
-```
+- **Notifications**: an On/Off switch (enabled = `bell` icon, disabled =
+  `bell-slash`).
+- **Playback**: a radio group with Browser (play in the browser) /
+  Backend (play on the host) / None (logs only).
 
-When muted:
-
-```text
-bell-slash
-```
-
-The icon follows the current light/dark theme.
+Changes apply immediately and are persisted to
+`~/.config/dsh/notify-bell.json` — no DSH restart needed. The icon and
+popover follow the current light/dark theme.
 
 ## Event Details
 

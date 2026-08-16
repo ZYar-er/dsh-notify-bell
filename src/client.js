@@ -34,11 +34,33 @@ window.__ModuleLoader__.load({
 
 		//#region 样式（与 Session log 按钮同风格：语义 token，双主题自适应）
 		var BUTTON_CSS = [
+			".nb-settings{position:relative;flex:none;display:inline-flex}",
 			".nb-bell-toggle{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);width:32px;height:32px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);cursor:pointer;background:0 0;border-radius:16px;justify-content:center;align-items:center;padding:0;display:inline-flex;flex:none}",
 			".nb-bell-toggle:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}",
 			".nb-bell-toggle:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}",
-			".nb-bell-toggle svg{flex:none}"
+			".nb-bell-toggle svg{flex:none}",
+			".nb-bell-toggle:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}"
 		].join("\n");
+		// popover：右对齐浮层，紧凑、不遮挡主要内容；全部语义 token（浅色/深色自适应）。
+		var POPOVER_CSS = [
+			".nb-popover{box-sizing:border-box;position:absolute;top:calc(100% + 6px);right:0;z-index:1200;width:220px;max-width:calc(100vw - 24px);background:var(--dsw-alias-bg-overlay);border:1px solid var(--dsw-alias-border-l2);border-radius:8px;padding:6px;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);text-align:left}",
+			".nb-popover-title{font-size:12px;font-weight:600;line-height:1.2;margin:6px 6px 4px;color:var(--dsw-alias-label-dimmed)}",
+			".nb-row{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px}",
+			".nb-row svg{flex:none;width:16px;height:16px;color:var(--dsw-alias-label-secondary)}",
+			".nb-row-label{flex:1;font-size:13px}",
+			".nb-switch{box-sizing:border-box;border:1px solid var(--dsw-alias-border-l2);background:0 0;color:var(--dsw-alias-label-primary);font-family:var(--dsw-font-family);font-size:12px;border-radius:12px;padding:2px 10px;cursor:pointer;line-height:1.6}",
+			".nb-switch:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}",
+			".nb-switch:disabled{color:var(--dsw-alias-label-dimmed);cursor:default}",
+			".nb-switch[aria-checked=\"false\"]{color:var(--dsw-alias-label-secondary)}",
+			".nb-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
+			".nb-radio-group{padding:2px 4px;display:flex;flex-direction:column;gap:2px}",
+			".nb-radio{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:6px;font-size:13px;cursor:pointer}",
+			".nb-radio:hover{background:var(--dsw-alias-interactive-bg-hover)}",
+			".nb-radio input{margin:0;accent-color:var(--dsw-alias-brand-primary)}",
+			".nb-radio input:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:1px}",
+			".nb-error{margin:6px 6px 2px;font-size:12px;color:var(--dsw-alias-state-error-primary)}"
+		].join("\n");
+		exports.POPOVER_CSS = POPOVER_CSS;
 		//#endregion
 
 		//#region Web → backend HTTP API
@@ -60,21 +82,92 @@ window.__ModuleLoader__.load({
 		}
 		exports.bellRpc = bellRpc;
 
-		/** 把 (enabled, error) 映射为按钮视图（图标/文案/title/aria）。 */
+		/** 把 (enabled, error) 映射为按钮视图（图标/文案/title/aria）。
+		 * 按钮现在打开通知设置 popover（不再是直接 toggle）；图标只代表
+		 * enabled 状态（bell / bell-slash），与 playback 无关。 */
 		function bellView(enabled, error) {
 			var on = enabled === true;
 			return {
 				icon: on ? "bell" : "bell-slash",
-				label: on ? "Disable notifications" : "Enable notifications",
-				title: error ? "Failed to update notifications setting" : (on ? "Disable notifications" : "Enable notifications"),
+				label: "Notification settings",
+				title: error ? "Failed to update notifications setting" : "Notification settings",
 				pressed: on,
 				ready: enabled !== null
 			};
 		}
 		exports.bellView = bellView;
+
+		//#region 设置视图纯函数（node 测试覆盖同一契约）
+		/** 中英文案字典；语言跟随页面（html lang），不自行切换。 */
+		var SETTINGS_I18N = {
+			en: { notifications: "Notifications", on: "On", off: "Off", playback: "Playback", browser: "Browser", backend: "Backend", none: "None", failed: "Failed to update settings" },
+			zh: { notifications: "通知", on: "开启", off: "关闭", playback: "播放方式", browser: "浏览器", backend: "后端", none: "静音", failed: "设置更新失败" }
+		};
+		exports.SETTINGS_I18N = SETTINGS_I18N;
+
+		/** playback 选项顺序（radio group 显示顺序）。 */
+		var PLAYBACK_OPTIONS = [
+			{ value: "browser", key: "browser" },
+			{ value: "backend", key: "backend" },
+			{ value: "none", key: "none" }
+		];
+		exports.playbackOptions = PLAYBACK_OPTIONS;
+
+		/** 语言检测：html lang 优先，navigator 兜底；zh 以外按 en。 */
+		function detectLang(htmlLang, navLang) {
+			if (typeof htmlLang === "string" && /^zh/i.test(htmlLang)) return "zh";
+			if (typeof htmlLang === "string" && htmlLang.length > 0) return "en";
+			if (typeof navLang === "string" && /^zh/i.test(navLang)) return "zh";
+			return "en";
+		}
+		exports.detectLang = detectLang;
+
+		/**
+		 * 完整设置视图映射（纯函数）：开关文案、radio 选中态、错误提示。
+		 * @param enabled - 后端运行时 enabled（null = 未加载）。
+		 * @param playback - 后端运行时 playback（null = 未加载）。
+		 * @param lang - 'en' | 'zh'。
+		 * @param error - 是否有写失败错误。
+		 */
+		function settingsView(enabled, playback, lang, error) {
+			var t = SETTINGS_I18N[lang] || SETTINGS_I18N.en;
+			var playbacks = PLAYBACK_OPTIONS.map(function (opt) {
+				return { value: opt.value, label: t[opt.key], checked: playback === opt.value };
+			});
+			return {
+				bellIcon: enabled === true ? "bell" : "bell-slash",
+				enabledReady: enabled !== null,
+				playbackReady: typeof playback === "string",
+				enabledOn: enabled === true,
+				switchLabel: enabled === true ? t.on : t.off,
+				title: t.notifications,
+				playbackTitle: t.playback,
+				playbacks: playbacks,
+				errorText: error ? t.failed : "",
+				lang: lang
+			};
+		}
+		exports.settingsView = settingsView;
+
+		/** Escape 键关闭 popover（open 时才响应）。 */
+		function closeOnEscape(open, key) {
+			return open === true && key === "Escape";
+		}
+		exports.closeOnEscape = closeOnEscape;
+
+		/** 外部点击关闭：target 既不在按钮内也不在 popover 内。 */
+		function closeOnOutside(open, target, buttonEl, popoverEl) {
+			if (open !== true) return false;
+			if (!target || typeof target.nodeType !== "number") return false;
+			var inButton = buttonEl && typeof buttonEl.contains === "function" && buttonEl.contains(target);
+			var inPopover = popoverEl && typeof popoverEl.contains === "function" && popoverEl.contains(target);
+			return !inButton && !inPopover;
+		}
+		exports.closeOnOutside = closeOnOutside;
+		//#endregion
 		//#endregion
 
-		//#region 铃铛组件
+		//#region 铃铛组件（通知设置 popover）
 		function BellIcon(props) {
 			var muted = props.muted;
 			return react.createElement(
@@ -84,53 +177,167 @@ window.__ModuleLoader__.load({
 			);
 		}
 
-		function BellToggleButton() {
-			var state = react.useState({ enabled: null, error: false });
+		/**
+		 * 铃铛按钮 + 通知设置 popover：
+		 *   - 点击铃铛打开/关闭 popover（不再直接 toggle）。
+		 *   - 通知开关（On/Off）→ POST setEnabled，乐观更新 + 失败回滚。
+		 *   - 播放方式 radio（Browser/Backend/None）→ POST setPlayback，乐观更新 + 失败回滚。
+		 *   - 初始状态 GET /notify-bell 一次拿 enabled + playback（backend 是唯一事实源）。
+		 *   - 外部点击 / Escape 关闭；原生 radio 提供键盘操作（方向键 + 空格）。
+		 */
+		function BellSettingsButton() {
+			var refs = react.useRef({ button: null, popover: null });
+			var state = react.useState({ enabled: null, playback: null, error: false, open: false });
 			var setState = state[1];
+			var current = state[0];
 
+			// 初始加载：GET 一次拿 enabled + playback（不假设任何默认值）。
 			react.useEffect(function () {
 				bellRpc("getEnabled")
 					.then(function (r) {
-						if (r && r.ok) setState(function (s) { return { enabled: r.value.enabled, error: false }; });
+						if (r && r.ok) setState(function (s) { return { enabled: r.value.enabled, playback: r.value.playback, error: false, open: s.open }; });
 					})
 					.catch(function () {
-						setState(function (s) { return s.enabled === null ? { enabled: true, error: false } : s; });
+						setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: true, open: s.open }; });
 					});
 			}, []);
 
-			var toggle = react.useCallback(function () {
-				setState(function (s) {
-					if (s.enabled === null) return s;
-					var before = s.enabled;
-					// 乐观更新：立即翻转 UI。
-					setState({ enabled: !before, error: false });
-					bellRpc("toggle")
-						.then(function (r) {
-							if (r && r.ok) setState({ enabled: r.value.enabled, error: false });
-							else setState({ enabled: before, error: true });
-						})
-						.catch(function () {
-							setState({ enabled: before, error: true });
-						});
-					// 轻量错误提示：title 临时显示错误文案（3 秒后恢复）。
-					if (s.error) setTimeout(function () { setState(function (cur) { return cur.error ? { enabled: cur.enabled, error: false } : cur; }); }, 3000);
-					return s;
-				});
-			}, []);
+			// popover 打开时：document 级外部点击 / Escape 关闭（关闭即移除监听）。
+			react.useEffect(function () {
+				if (!current.open) return;
+				var onPointer = function (event) {
+					if (closeOnOutside(true, event.target, refs.current.button, refs.current.popover)) {
+						setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: s.error, open: false }; });
+					}
+				};
+				var onKey = function (event) {
+					if (closeOnEscape(true, event.key)) {
+						setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: s.error, open: false }; });
+					}
+				};
+				document.addEventListener("pointerdown", onPointer, true);
+				document.addEventListener("keydown", onKey, true);
+				return function () {
+					document.removeEventListener("pointerdown", onPointer, true);
+					document.removeEventListener("keydown", onKey, true);
+				};
+			}, [current.open]);
 
-			var view = bellView(state[0].enabled, state[0].error);
+			/** 轻量错误提示：popover 内 error 文案，3 秒后自动恢复。 */
+			var flagError = function () {
+				setTimeout(function () {
+					setState(function (s) { return s.error ? { enabled: s.enabled, playback: s.playback, error: false, open: s.open } : s; });
+				}, 3000);
+			};
+
+			var setEnabledOpt = function (next) {
+				var before = current.enabled;
+				if (before === null) return;
+				// 乐观更新：立即翻转 UI；失败回滚 + 错误提示。
+				setState({ enabled: next, playback: current.playback, error: false, open: true });
+				bellRpc("setEnabled", { enabled: next })
+					.then(function (r) {
+						if (r && r.ok) setState(function (s) { return { enabled: r.value.enabled, playback: s.playback, error: false, open: true }; });
+						else { setState(function (s) { return { enabled: before, playback: s.playback, error: true, open: true }; }); flagError(); }
+					})
+					.catch(function () {
+						setState(function (s) { return { enabled: before, playback: s.playback, error: true, open: true }; });
+						flagError();
+					});
+			};
+
+			var setPlaybackOpt = function (next) {
+				var before = current.playback;
+				if (typeof before !== "string") return;
+				// 乐观更新：立即选中；失败回滚 + 错误提示。
+				setState({ enabled: current.enabled, playback: next, error: false, open: true });
+				bellRpc("setPlayback", { playback: next })
+					.then(function (r) {
+						if (r && r.ok) setState(function (s) { return { enabled: s.enabled, playback: r.value.playback, error: false, open: true }; });
+						else { setState(function (s) { return { enabled: s.enabled, playback: before, error: true, open: true }; }); flagError(); }
+					})
+					.catch(function () {
+						setState(function (s) { return { enabled: s.enabled, playback: before, error: true, open: true }; });
+						flagError();
+					});
+			};
+
+			var lang = detectLang(
+				typeof document !== "undefined" && document.documentElement ? document.documentElement.lang : "",
+				typeof navigator !== "undefined" && navigator.language ? navigator.language : ""
+			);
+			var view = settingsView(current.enabled, current.playback, lang, current.error);
+			var bell = bellView(current.enabled, current.error);
+
 			return react.createElement(
-				"button",
-				{
-					type: "button",
-					className: "nb-bell-toggle",
-					"aria-label": view.label,
-					"aria-pressed": view.pressed,
-					title: view.title,
-					disabled: !view.ready,
-					onClick: toggle
-				},
-				react.createElement(BellIcon, { muted: view.icon === "bell-slash" })
+				"div",
+				{ className: "nb-settings" },
+				react.createElement(
+					"button",
+					{
+						type: "button",
+						ref: function (el) { refs.current.button = el; },
+						className: "nb-bell-toggle",
+						"aria-label": bell.label,
+						"aria-haspopup": "dialog",
+						"aria-expanded": current.open ? "true" : "false",
+						title: bell.title,
+						disabled: !bell.ready,
+						onClick: function () {
+							setState(function (s) { return { enabled: s.enabled, playback: s.playback, error: s.error, open: !s.open }; });
+						}
+					},
+					react.createElement(BellIcon, { muted: view.bellIcon === "bell-slash" })
+				),
+				current.open ? react.createElement(
+					"div",
+					{
+						ref: function (el) { refs.current.popover = el; },
+						className: "nb-popover",
+						role: "dialog",
+						"aria-label": view.title
+					},
+					react.createElement("div", { className: "nb-popover-title" }, view.title),
+					react.createElement(
+						"div",
+						{ className: "nb-row" },
+						react.createElement(BellIcon, { muted: !view.enabledOn }),
+						react.createElement("span", { className: "nb-row-label" }, view.title),
+						react.createElement(
+							"button",
+							{
+								type: "button",
+								className: "nb-switch",
+								role: "switch",
+								"aria-checked": view.enabledOn ? "true" : "false",
+								disabled: !view.enabledReady,
+								onClick: function () { setEnabledOpt(!view.enabledOn); }
+							},
+							view.switchLabel
+						)
+					),
+					react.createElement("div", { className: "nb-popover-title" }, view.playbackTitle),
+					react.createElement(
+						"div",
+						{ className: "nb-radio-group", role: "radiogroup", "aria-label": view.playbackTitle },
+						view.playbacks.map(function (opt) {
+							return react.createElement(
+								"label",
+								{ className: "nb-radio", key: opt.value },
+								react.createElement("input", {
+									type: "radio",
+									name: "nb-playback",
+									value: opt.value,
+									checked: opt.checked,
+									disabled: !view.playbackReady,
+									onChange: function () { setPlaybackOpt(opt.value); }
+								}),
+								react.createElement("span", null, opt.label)
+							);
+						})
+					),
+					view.errorText ? react.createElement("div", { className: "nb-error", role: "status" }, view.errorText) : null
+				) : null
 			);
 		}
 		//#endregion
@@ -320,7 +527,7 @@ window.__ModuleLoader__.load({
 			ctx.effect(function () {
 				var style = document.createElement("style");
 				style.setAttribute("data-plugin", "dsh-notify-bell");
-				style.textContent = BUTTON_CSS;
+				style.textContent = BUTTON_CSS + "\n" + POPOVER_CSS;
 				document.head.append(style);
 				return function () { style.remove(); };
 			}, "dsh-notify-bell: styles");
@@ -344,7 +551,7 @@ window.__ModuleLoader__.load({
 						id: "notify-bell-toggle",
 						order: 90,
 						inject: function () { return {}; }
-					}, BellToggleButton);
+					}, BellSettingsButton);
 					return function () { dispose(); };
 				});
 			}, "dsh-notify-bell: bell entry");

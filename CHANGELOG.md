@@ -6,7 +6,13 @@ dsh-notify-bell 版本级、面向用户的变化记录。历史条目与对应�
 
 ### Added
 
-- `playback: "browser"` 实验：后端分类后经 SSE（`/notify-bell/events`）推送 semantic sound，DSH Web 浏览器用 Web Audio 播放对应 WAV（`/notify-bell/sounds/*.wav` 直接服务 sound-showcase 素材）。事件分类始终在后端；browser 模式下本机后端不播放。含用户手势 unlock（AudioContext resume）与 locked 诊断状态。
+- Web Playback Selector：右上角铃铛改为打开通知设置弹层（通知 On/Off 开关 + 播放方式 radio：Browser / Backend / None）。设置实时生效、原子持久化到 `~/.config/dsh/notify-bell.json`（无需重启），后端 config 是唯一事实源。弹层支持外部点击/Escape 关闭、原生 radio 键盘操作、中英文、浅色/深色主题、focus-visible。
+- `playback` 三值语义：`browser`（SSE 推送 → 浏览器 Web Audio 播放）、`backend`（本机 BEL/WAV 播放）、`none`（只日志，两端静默）；默认 `browser`。
+- API：`GET /notify-bell` 返回 `{ enabled, playback }`；新增 `POST /notify-bell/setPlayback`（非法值 400，写失败 500 且运行时不变）；`writePlayback` 原子写。
+
+### Changed
+
+- `playback` 从静态配置变为运行时可变状态（与 `enabled` 同级，二者相互独立）。
 
 ## [0.11.2] - 2026-08-16
 

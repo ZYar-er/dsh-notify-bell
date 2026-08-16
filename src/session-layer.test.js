@@ -21,10 +21,12 @@ function boot(options = {}) {
 const dir = mkdtempSync(join(tmpdir(), 'notify-bell-session-layer-'));
 const file = join(dir, 'config.json');
 writeFileSync(file, JSON.stringify({
-enabled: true,
-// 会话层测试事件在毫秒级完成；把门槛降到 1ms，避免测试依赖真实耗时。
-minDuration: options.minDuration ?? 0.001,
-bell: { gapMs: 1, permissionGapMs: 1 }
+	enabled: true,
+	// 会话层测试断言 BEL 行为，固定 backend（生产默认 browser）。
+	playback: 'backend',
+	// 会话层测试事件在毫秒级完成；把门槛降到 1ms，避免测试依赖真实耗时。
+	minDuration: options.minDuration ?? 0.001,
+	bell: { gapMs: 1, permissionGapMs: 1 }
 }));
 const writes = [];
 const root = new Context();

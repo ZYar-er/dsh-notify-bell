@@ -172,7 +172,7 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
     }
   },
   "soundPack": "wav",
-  "playback": "backend",
+  "playback": "browser",
   "wav": {
     "directory": "~/.config/dsh/notify-bell/sounds",
     "fallback": "bell"
@@ -184,23 +184,27 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
 }
 ```
 
-### 播放位置（实验阶段）
+### 播放位置
 
-`playback` 决定通知声音在哪里播放（`soundPack` 仍是声音素材来源）：
+`playback` 决定通知声音在哪里播放（`soundPack` 仍是声音素材来源）。
+默认 `browser`；也可以直接在 DSH Web 界面点右上角铃铛，在设置弹层里
+实时切换（无需重启）：
 
-- `backend`（默认）：由本机播放（`soundPack` 决定 BEL 或 WAV），与之前行为一致。
 - `browser`：后端仍负责事件分类与日志，但本机不播放任何声音；后端通过
   Server-Sent Events（`GET /notify-bell/events`）推送 semantic sound，
   由 DSH Web 浏览器播放对应的 WAV（`/notify-bell/sounds/*.wav`，直接服务
   包内 `sound-showcase/sounds` 的素材）。一个通知只播放一次。
+- `backend`：由本机播放（`soundPack` 决定 BEL 或 WAV），浏览器不响。
+- `none`：只保留日志——不推送到浏览器、本机也不播放。
 
-本阶段实验说明：
+浏览器说明：
 
 - 浏览器使用 Web Audio；autoplay 策略要求先有一次用户手势
   （`pointerdown`/`keydown`）才会出声。未解锁时播放静默失败，状态记录在
   console（`console.debug`），绝不抛出、不影响 DSH 页面。
 - 暂无 `both`、无后端 fallback、无多标签页协调。
-- `enabled=false` 依然全静音：后端不推送、浏览器不播放。
+- `enabled=false` 依然全静音：后端不推送、浏览器不播放。`enabled` 与
+  `playback` 是两个独立设置。
 
 ### 完成任务的最短时长
 
@@ -221,24 +225,18 @@ DSH Web 中的通知按钮可以实时开启或关闭通知。
 
 ## Web UI
 
-插件会在右上角 **Session log** 按钮旁增加通知开关：
+插件会在右上角 **Session log** 按钮旁增加通知按钮（bell）：
 
 ```text
 Session log   🔔
 ```
 
-开启：
+点击铃铛打开通知设置弹层：
 
-```text
-bell
-```
+- **通知**：On/Off 开关（开启 = bell，关闭 = bell-slash 图标）
+- **播放方式**：Browser（浏览器播放）/ Backend（本机播放）/ None（静音）
 
-静音：
-
-```text
-bell-slash
-```
-
+设置实时生效并持久化到 `~/.config/dsh/notify-bell.json`，无需重启 DSH。
 图标会自动适配浅色和深色主题。
 
 ## 事件说明
