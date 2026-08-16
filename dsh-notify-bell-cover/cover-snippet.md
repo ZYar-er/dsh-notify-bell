@@ -18,7 +18,7 @@
 
 ```html
 <p align="center">
-  <img src="dsh-notify-bell-cover/readme-cover.png" alt="dsh-notify-bell — semantic sounds for DSH" width="100%" />
+  <img src="https://raw.githubusercontent.com/ZYar-er/dsh-notify-bell/main/dsh-notify-bell-cover/readme-cover.png" alt="dsh-notify-bell — semantic sounds for DSH" width="100%" />
 </p>
 ```
 
@@ -26,7 +26,7 @@
 
 ```html
 <p align="center">
-  <img src="dsh-notify-bell-cover/readme-cover.zh.png" alt="dsh-notify-bell — DSH 语义通知插件" width="100%" />
+  <img src="https://raw.githubusercontent.com/ZYar-er/dsh-notify-bell/main/dsh-notify-bell-cover/readme-cover.zh.png" alt="dsh-notify-bell — DSH 语义通知插件" width="100%" />
 </p>
 ```
 

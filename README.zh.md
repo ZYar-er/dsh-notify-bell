@@ -5,7 +5,7 @@
 [![npm](https://img.shields.io/npm/v/dsh-notify-bell)](https://www.npmjs.com/package/dsh-notify-bell) [![GitHub Release](https://img.shields.io/github/v/release/ZYar-er/dsh-notify-bell)](https://github.com/ZYar-er/dsh-notify-bell/releases/latest)
 
 <p align="center">
-  <img src="dsh-notify-bell-cover/readme-cover.zh.png" alt="dsh-notify-bell — DSH 语义通知插件" width="100%" />
+  <img src="https://raw.githubusercontent.com/ZYar-er/dsh-notify-bell/main/dsh-notify-bell-cover/readme-cover.zh.png" alt="dsh-notify-bell — DSH 语义通知插件" width="100%" />
 </p>
 
 **DeepSeek Harness (DSH) 社区插件**，为重要的 Agent 事件提供语义化提示音通知。
