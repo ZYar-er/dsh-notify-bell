@@ -1,7 +1,6 @@
 {
   "name": "dsh-notify-bell",
   "version": "0.10.0",
-  "private": true,
   "license": "MIT",
   "description": "DSH notification plugin with semantic sounds (done/block/permission/question/error): goal complete/block, approval/asked, ask_user_question, and agent/error notify via BEL or WAV. Official Cordis plugin form: Config schema, bundle patch (dsh.bundle), Web bell toggle in the session header. Configurable via cordis.yml or the legacy ~/.config/dsh/notify-bell.json (bellCount still accepted).",
   "type": "module",
