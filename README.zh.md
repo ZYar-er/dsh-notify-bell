@@ -1,6 +1,6 @@
 # dsh-notify-bell
 
-[English](./README.md) | [中文](./README.zh.md)
+[English](./README.md) | [中文](./README.zh.md) | [Changelog](./CHANGELOG.md)
 
 ![npm](https://img.shields.io/npm/v/dsh-notify-bell)
 
@@ -175,6 +175,10 @@ cordis.yml 显式配置  >  notify-bell.json  >  schema 默认值
   "wav": {
     "directory": "~/.config/dsh/notify-bell/sounds",
     "fallback": "bell"
+  },
+  "bell": {
+    "gapMs": 150,
+    "permissionGapMs": 300
   }
 }
 ```
@@ -329,7 +333,7 @@ semantic sound
 
 当前测试：
 
-**85/85 通过**
+**全部通过** — 11/11 个 node:test 用例（6 个单元 + 5 个会话层集成）。
 
 已经完成真实验证：
 

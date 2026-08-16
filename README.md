@@ -1,6 +1,6 @@
 # dsh-notify-bell
 
-[English](./README.md) | [中文](./README.zh.md)
+[English](./README.md) | [中文](./README.zh.md) | [Changelog](./CHANGELOG.md)
 
 ![npm](https://img.shields.io/npm/v/dsh-notify-bell)
 
@@ -175,6 +175,10 @@ Example file:
   "wav": {
     "directory": "~/.config/dsh/notify-bell/sounds",
     "fallback": "bell"
+  },
+  "bell": {
+    "gapMs": 150,
+    "permissionGapMs": 300
   }
 }
 ```
@@ -321,7 +325,7 @@ This makes it possible to add other backends later without changing the DSH even
 
 Current test suite:
 
-**85/85 tests passing**
+**All tests passing** — 11/11 node:test cases (6 unit + 5 session-layer integration).
 
 Real-world verification has been completed for:
 
