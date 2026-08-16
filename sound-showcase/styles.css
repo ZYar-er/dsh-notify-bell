@@ -441,12 +441,25 @@ main {
 
 .notes-list {
 	margin: 0 0 14px;
-	padding-left: 22px;
+	padding: 0;
+	list-style: none;
 	display: grid;
-	grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-	gap: 6px 18px;
+	grid-template-columns: repeat(3, 1fr);
+	gap: 8px 18px;
 	color: var(--fg-secondary);
 	font-size: 13.5px;
+}
+
+/* 5 个语义条目：桌面 3+2、平板 2+2+1、移动单列；code 列竖排对齐。 */
+.notes-list li {
+	display: flex;
+	align-items: baseline;
+	gap: 8px;
+	min-width: 0;
+}
+
+.notes-list li code {
+	flex: none;
 }
 
 .notes-src {
@@ -493,11 +506,19 @@ main {
 	.demo-btn {
 		justify-content: center;
 	}
+
+	.notes-list {
+		grid-template-columns: 1fr; /* mobile: single column */
+	}
 }
 
 @media (min-width: 701px) and (max-width: 1020px) {
 	.cards-grid {
 		grid-template-columns: repeat(2, 1fr); /* tablet: two columns */
+	}
+
+	.notes-list {
+		grid-template-columns: repeat(2, 1fr); /* tablet: 2+2+1 */
 	}
 }
 
